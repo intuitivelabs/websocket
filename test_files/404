@@ -1,0 +1,8 @@
+Å~6SIP/2.0 404 Not found
+Via: SIP/2.0/WSS m8ogoufkvokj.invalid;branch=z9hG4bK6811379;received=::ffff:172.31.23.136
+To: <sip:vlada@intlabs.test>;tag=25024214-616568BC0002FFEC-9B7DB700
+From: "vlada" <sip:vlada@intlabs.test>;tag=k2pq25bp8r
+Call-ID: f8igv7otb39spg1upl7km5
+CSeq: 1 REGISTER
+Content-Length: 0
+
