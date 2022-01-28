@@ -1,4 +1,4 @@
-package webrtc
+package websocket
 
 import (
 	"encoding/binary"

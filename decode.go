@@ -1,8 +1,7 @@
-package webrtc
+package websocket
 
 import (
 	"errors"
-	"fmt"
 	"github.com/intuitivelabs/httpsp"
 )
 
@@ -13,6 +12,7 @@ var (
 	ErrDataMoreBytes   = errors.New("Need more bytes for WebSocket frame data")
 	ErrFragBufTooSmall = errors.New("Defragmentation buffer is too small")
 	ErrFragCopy        = errors.New("Fragment copy failure")
+	ErrNotDecoded      = errors.New("Frame (fragment) is not decoded")
 	ErrCritical        = errors.New("Critical error")
 )
 
@@ -108,8 +108,6 @@ func (h *Header) Decode(b []byte) error {
 	h.MaskingF = (maskPayloadLen&MaskingF == MaskingF)
 	h.PayloadLenInd = maskPayloadLen & PayloadLenBM
 	h.PayloadLen = uint64(h.PayloadLenInd)
-	fmt.Printf("h.PayloadLenInd: %d\n", h.PayloadLenInd)
-	fmt.Printf("len(b): %d\n", len(b))
 	h.DecodedF = true
 	if len(b) < h.Len() {
 		h.DecodedF = false
@@ -126,7 +124,6 @@ func (h *Header) Decode(b []byte) error {
 	if h.MaskingF {
 		copy(h.MaskingKey[:], b[i:])
 	}
-	fmt.Printf("header of %d bytes decoded: %v\n", h.Len(), h)
 	return ErrHdrOk
 }
 
@@ -155,12 +152,14 @@ func (h *Header) Decode(b []byte) error {
 
 */
 type FrameFragment struct {
-	Header        Header
+	Header Header
+	// mark that data was already masked
+	WasMaskedF    bool
 	PayloadDataPf httpsp.PField
 	//PayloadData   []byte
 }
 
-func (f FrameFragment) Reset() {
+func (f *FrameFragment) Reset() {
 	f.Header = Header{}
 	//f.PayloadData = nil
 }
@@ -196,6 +195,10 @@ func (f FrameFragment) Pf() httpsp.PField {
 	return f.PayloadDataPf
 }
 
+func (f FrameFragment) PayloadData(b []byte) []byte {
+	return f.PayloadDataPf.Get(b)
+}
+
 func (f *FrameFragment) Decode(b []byte, offset int) (int, error) {
 	var err error
 	currentBuf := b[offset:]
@@ -220,21 +223,31 @@ func (f *FrameFragment) Decode(b []byte, offset int) (int, error) {
 	return offset, ErrCritical
 }
 
+// Mask uses xor encryption for masking fragment payloads. Warning: it overwrites input memory.
+// See: https://www.rfc-editor.org/rfc/rfc6455.html#section-5.3
 func (f *FrameFragment) Mask(buf []byte) {
-	if f.Header.MaskingF {
+	if f.WasMaskedF {
+		return
+	}
+	if !f.Header.MaskingF {
 		return
 	}
 	slice := f.PayloadDataPf.Get(buf)
 	for i, b := range slice {
 		slice[i] = b ^ f.Header.MaskingKey[i%4]
 	}
+	f.WasMaskedF = true
 }
 
 type Frame struct {
+	// all the frame's fragments
 	Fragments []FrameFragment
-	Idx       int
+	// this is the index of the last read and decoded fragment
+	Idx int
 }
 
+// NewFrame returns a pointer to a newly initialized, empty frame which
+// has at most "capacity" fragments.
 func NewFrame(capacity int) *Frame {
 	return &Frame{
 		Fragments: make([]FrameFragment, capacity, capacity),
@@ -242,32 +255,44 @@ func NewFrame(capacity int) *Frame {
 	}
 }
 
+// Reset re-initializes all the fragments in the frame. It sets the index of
+// the last decoded fragment to 0.
 func (f *Frame) Reset() {
-	f.Idx = 0
-	for _, frag := range f.Fragments {
+	for _, frag := range f.Fragments[0:f.Idx] {
 		frag.Reset()
 	}
+	f.Idx = 0
 }
 
 // Len returns the total length of the frame fragments (including headers)
 func (f Frame) Len() uint64 {
 	var l uint64 = 0
-	for _, frag := range f.Fragments {
-		fmt.Printf("frag.Len(): %d\n", frag.Len())
+	for _, frag := range f.Fragments[0:f.Idx] {
 		l += frag.Len()
 	}
 	return l
 }
 
+// Decoded returns "true" if all the fragments in the frame were decoded.
+func (f Frame) Decoded() bool {
+	for _, frag := range f.Fragments[0:f.Idx] {
+		if !frag.Header.DecodedF {
+			return false
+		}
+	}
+	return true
+}
+
 // PayloadLen returns the total length of the frame fragments' payloads (excluding headers)
 func (f Frame) PayloadLen() uint64 {
 	var l uint64 = 0
-	for _, frag := range f.Fragments {
+	for _, frag := range f.Fragments[0:f.Idx] {
 		l += frag.Header.PayloadLen
 	}
 	return l
 }
 
+// Append appends a new fragment to the frame. Warning: the fragment should be decoded first!
 func (f *Frame) Append(fragment FrameFragment) {
 	if f.Idx < len(f.Fragments) {
 		f.Fragments[f.Idx] = fragment
@@ -277,6 +302,20 @@ func (f *Frame) Append(fragment FrameFragment) {
 	f.Idx++
 }
 
+// Decode decodes fragments from the input buffer "b" starting at "offset". Once decoded
+// fragments are stored in the "Frame" and can be further processed. For example here is how
+// to iterate over the fragments in a frame:
+//
+// 	func (f Frame) DumpPayloadDataIterator(buf []byte) {
+//		for _, frag := range f.Fragments[0:f.Idx] {
+//			frag.Printf("payload data:%v\n", frag.PayloadDataPf.Get(buf))
+//      }
+//	}
+//
+// Please note that Decode does not perform masking!
+// In case of success it returns the offset where the new fragment should start and the error "ErrHdrOk"
+// In case of failure it returns the value of the input parameter "offset" and either of the errors:
+// "ErrHdrMoreBytes", "ErrDataMoreBytes" meaning that more data is needed for decoding the frame
 func (f *Frame) Decode(b []byte, offset int) (int, error) {
 	var (
 		fragmented bool
@@ -296,7 +335,6 @@ func (f *Frame) Decode(b []byte, offset int) (int, error) {
 			}
 			if fragment.OnlyOne() || fragment.Last() {
 				// it is either a stand-alone frame or it is the last fragment of the frame
-				fmt.Println("either not fragmented or last fragment")
 				break
 			}
 			if fragment.Ctrl() && !fragmented {
@@ -312,37 +350,49 @@ func (f *Frame) Decode(b []byte, offset int) (int, error) {
 	return offset, err
 }
 
+// Mask uses xor encryption for masking all fragment payloads which are part of this frame.
+// Warning: it overwrites input memory.
+// See: https://www.rfc-editor.org/rfc/rfc6455.html#section-5.3
 func (f *Frame) Mask(buf []byte) {
-	for _, frag := range f.Fragments {
+	for _, frag := range f.Fragments[0:f.Idx] {
 		frag.Mask(buf)
 	}
 }
 
+// FragmentCount returns the number of fragments in this frame
 func (f Frame) FragmentCount() int {
-	return len(f.Fragments)
+	return f.Idx
 }
 
-func (f Frame) Defragment(dst, src []byte) ([]byte, error) {
+// Defragment unmasks fragments which were decoded from the "src" buffer and copies their payload
+// data into "dst" memory buffer. If there is only one fragment, no copy is performed.
+// It returns the buffer containing the unmasked payload data, its length and error if the operation
+// could not be performed correctly.
+func (f *Frame) Defragment(dst, src []byte) ([]byte, int, error) {
+	if !f.Decoded() {
+		return nil, 0, ErrNotDecoded
+	}
+	f.Mask(src)
 	if len(f.Fragments) == 1 {
 		// only one fragment
-		return f.Fragments[0].PayloadDataPf.Get(src), nil
+		return f.Fragments[0].PayloadDataPf.Get(src), int(f.Fragments[0].PayloadDataPf.Len), nil
 	}
 	if int(f.PayloadLen()) > len(dst) {
-		return nil, ErrFragBufTooSmall
+		return nil, 0, ErrFragBufTooSmall
 	}
 	offset := 0
-	for _, frag := range f.Fragments {
+	for _, frag := range f.Fragments[0:f.Idx] {
 		slice := frag.PayloadDataPf.Get(src)
 		n := copy(dst[offset:], slice)
 		if n < int(frag.Header.PayloadLen) {
-			return nil, ErrFragCopy
+			return nil, 0, ErrFragCopy
 		}
 		offset += n
 	}
-	return dst, nil
+	return dst, offset, nil
 }
 
-func (f *Frame) GetPayloadData(dst, src []byte) ([]byte, error) {
-	f.Mask(src)
+// PayloadData is just another name for Defragment
+func (f *Frame) PayloadData(dst, src []byte) ([]byte, int, error) {
 	return f.Defragment(dst, src)
 }
