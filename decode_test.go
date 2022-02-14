@@ -2,6 +2,8 @@ package websocket
 
 import (
 	"bytes"
+	"fmt"
+	"io"
 	"os"
 	"testing"
 )
@@ -18,7 +20,7 @@ func readPkt(dirName, fileName string, b []byte) (int, error) {
 func TestDecoder(t *testing.T) {
 	// set-up if needed
 	var plainPkt, maskedPkt [2048]byte
-	frame := NewFrame(10)
+	frame := NewFrame(64535, 10)
 	dirName := "test_files"
 	fileName := "404"
 	plainPktCnt, readErr := readPkt(dirName, fileName, plainPkt[:])
@@ -30,6 +32,122 @@ func TestDecoder(t *testing.T) {
 	if readErr != nil {
 		t.Fatalf(`could not read data file "%s/%s": %s`, dirName, fileName, readErr)
 	}
+	t.Run("rfc6455 single unmasked message", func(t *testing.T) {
+		plainPkt := []byte{
+			0x81, 0x05, 0x48, 0x65, 0x6c, 0x6c, 0x6f,
+		}
+		pktBytes := []byte{
+			0x48, 0x65, 0x6c, 0x6c, 0x6f,
+		}
+		frame.Reset()
+		if offs, err := frame.Decode(plainPkt[:], 0); err != ErrHdrOk {
+			t.Fatalf("decode error %s", err)
+		} else if offs != int(frame.Len()) {
+			t.Fatalf("expected offs: %d, got offs: %d", int(frame.Len()), offs)
+		}
+		var dst [2048]byte
+		if pd, length, err := frame.PayloadData(dst[:], plainPkt[:]); err != nil {
+			t.Fatalf("frame processing error: %s", err)
+		} else if !bytes.Equal(pd[0:length], pktBytes) {
+			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes), string(pd[0:length]))
+		}
+	})
+	t.Run("rfc6455 single masked message", func(t *testing.T) {
+		maskedPkt := []byte{
+			0x81, 0x85, 0x37, 0xfa, 0x21, 0x3d, 0x7f, 0x9f, 0x4d, 0x51, 0x58,
+		}
+		pktBytes := []byte{
+			0x48, 0x65, 0x6c, 0x6c, 0x6f,
+		}
+		frame.Reset()
+		if offs, err := frame.Decode(maskedPkt[:], 0); err != ErrHdrOk {
+			t.Fatalf("decode error %s", err)
+		} else if offs != int(frame.Len()) {
+			t.Fatalf("expected offs: %d, got offs: %d", int(frame.Len()), offs)
+		}
+		var dst [2048]byte
+		if pd, length, err := frame.PayloadData(dst[:], maskedPkt[:]); err != nil {
+			t.Fatalf("frame processing error: %s", err)
+		} else if !bytes.Equal(pd[0:length], pktBytes) {
+			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes), string(pd[0:length]))
+		}
+	})
+	t.Run("rfc6455 fragmented unmasked message", func(t *testing.T) {
+		plainPkt := []byte{
+			/*first frame*/ 0x01, 0x03, 0x48, 0x65, 0x6c,
+			/*last frame*/ 0x80, 0x02, 0x6c, 0x6f,
+		}
+		pktBytes := []byte{
+			0x48, 0x65, 0x6c, 0x6c, 0x6f,
+		}
+		frame.Reset()
+
+		// read first fragment
+		offs, err := frame.Decode(plainPkt[:5], 0)
+		if err == ErrHdrOk {
+			t.Fatalf("decode error %s", err)
+		} else if offs != int(frame.Len()) {
+			t.Fatalf("expected offs: %d, got offs: %d", int(frame.Len()), offs)
+		}
+		var dst [2048]byte
+		if pd, length, err := frame.PayloadData(dst[:], plainPkt[:]); err != nil {
+			t.Fatalf("frame processing error: %s", err)
+		} else if !bytes.Equal(pd[0:length], pktBytes[0:3]) {
+			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes[0:3]), string(pd[0:length]))
+		}
+
+		// read last fragment
+		if offs, err = frame.Decode(plainPkt[:], offs); err != ErrHdrOk {
+			t.Fatalf("decode error %s", err)
+		} else if offs != len(plainPkt) {
+			t.Fatalf("expected offs: %d, got offs: %d", int(frame.Len()), offs)
+		}
+		if pd, length, err := frame.PayloadData(dst[:], plainPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
+			t.Fatalf("frame processing error: %s", err)
+		} else if !bytes.Equal(pd[0:length], pktBytes) {
+			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes), string(pd[0:length]))
+		}
+	})
+	t.Run("iterating fragmented unmasked message", func(t *testing.T) {
+		plainPkt := []byte{
+			/*first frame*/ 0x01, 0x03, 0x48, 0x65, 0x6c,
+			/*last frame*/ 0x80, 0x02, 0x6c, 0x6f,
+		}
+		pktBytes := [][]byte{
+			{0x48, 0x65, 0x6c},
+			{0x6c, 0x6f},
+		}
+		frame.Reset()
+
+		// read first fragment
+		offs, err := frame.Decode(plainPkt[:5], 0)
+		if err == ErrHdrOk {
+			t.Fatalf("decode error %s", err)
+		} else if offs != int(frame.Len()) {
+			t.Fatalf("expected offs: %d, got offs: %d", int(frame.Len()), offs)
+		} else if frame.LastFragment != 1 {
+			t.Fatalf("expected LastFragment: %d, got LastFragment: %d", 1, frame.LastFragment)
+		}
+		for i, f := range frame.Fragments[0:frame.LastFragment] {
+			if !bytes.Equal(f.PayloadDataPf.Get(plainPkt[:5]), pktBytes[i]) {
+				t.Fatalf("payload data mismatch expected:\n%v\n, got:\n%v\n", pktBytes[i], f.PayloadDataPf.Get(plainPkt[:5]))
+			}
+		}
+		// read last fragment
+		if offs, err = frame.Decode(plainPkt[:], offs); err != ErrHdrOk {
+			t.Fatalf("decode error %s", err)
+		} else if offs != len(plainPkt) {
+			t.Fatalf("expected offs: %d, got offs: %d", int(frame.Len()), offs)
+		} else if frame.LastFragment != 2 {
+			t.Fatalf("expected LastFragment: %d, got LastFragment: %d", 2, frame.LastFragment)
+		}
+		for i, f := range frame.Fragments[0:frame.LastFragment] {
+			fmt.Printf("frame %d: %v\n", i, string(f.PayloadDataPf.Get(plainPkt[:])))
+			if !bytes.Equal(f.PayloadDataPf.Get(plainPkt[:]), pktBytes[i]) {
+				t.Fatalf("payload data mismatch expected:\n%v\n, got:\n%v\n", pktBytes[i], f.PayloadDataPf.Get(plainPkt[:]))
+			}
+		}
+	})
 	t.Run("plain full", func(t *testing.T) {
 		pktBytes := []byte{
 			0x53, 0x49, 0x50, 0x2f, 0x32, 0x2e, 0x30, 0x20,
