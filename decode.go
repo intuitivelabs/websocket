@@ -203,12 +203,8 @@ func (f FrameFragment) Ctrl() bool {
 	return f.Header.Opcode >= CloseOp
 }
 
-func (f FrameFragment) OnlyOne() bool {
-	return f.Header.FinF && f.Header.Opcode != ContOp
-}
-
 func (f FrameFragment) First() bool {
-	return !f.Header.FinF && f.Header.Opcode != ContOp
+	return f.Header.Opcode != ContOp
 }
 
 func (f FrameFragment) Continuation() bool {
@@ -216,7 +212,15 @@ func (f FrameFragment) Continuation() bool {
 }
 
 func (f FrameFragment) Last() bool {
-	return f.Header.FinF && f.Header.Opcode == ContOp
+	return f.Header.FinF
+}
+
+func (f FrameFragment) OnlyOne() bool {
+	return f.First() && f.Last()
+}
+
+func (f FrameFragment) Compressed() bool {
+	return f.Header.Rsv1F && f.First()
 }
 
 func (f FrameFragment) Pf() httpsp.PField {
