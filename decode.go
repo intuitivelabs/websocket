@@ -1,19 +1,44 @@
 package websocket
 
 import (
+	"bytes"
+	"compress/flate"
 	"errors"
+	"fmt"
 	"github.com/intuitivelabs/httpsp"
+	"io"
+)
+
+/*
+  https://www.rfc-editor.org/rfc/rfc1951.html#page-11
+
+    3.2.4. Non-compressed blocks (BTYPE=00)
+
+         Any bits of input up to the next byte boundary are ignored.
+         The rest of the block consists of the following information:
+
+              0   1   2   3   4...
+            +---+---+---+---+================================+
+            |  LEN  | NLEN  |... LEN bytes of literal data...|
+            +---+---+---+---+================================+
+
+         LEN is the number of data bytes in the block.  NLEN is the
+         one's complement of LEN.
+*/
+// deflate empty block
+var (
+	deflateNonCompressedEmptyBlock = []byte{0x00, 0x00, 0xFF, 0xFF}
 )
 
 // errors
 var (
-	ErrHdrOk           = errors.New("Header OK")
-	ErrHdrMoreBytes    = errors.New("Need more bytes for WebSocket frame header")
-	ErrDataMoreBytes   = errors.New("Need more bytes for WebSocket frame data")
-	ErrFragBufTooSmall = errors.New("Defragmentation buffer is too small")
-	ErrFragCopy        = errors.New("Fragment copy failure")
-	ErrNotDecoded      = errors.New("Frame (fragment) is not decoded")
-	ErrCritical        = errors.New("Critical error")
+	ErrHdrOk           = errors.New("header OK")
+	ErrHdrMoreBytes    = errors.New("need more bytes for WebSocket frame header")
+	ErrDataMoreBytes   = errors.New("need more bytes for WebSocket frame data")
+	ErrFragBufTooSmall = errors.New("defragmentation buffer is too small")
+	ErrFragCopy        = errors.New("fragment copy failure")
+	ErrNotDecoded      = errors.New("frame (fragment) is not decoded")
+	ErrCritical        = errors.New("critical error")
 )
 
 // Fin, Reserved flags & opcode bitmask
