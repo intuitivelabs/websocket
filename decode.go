@@ -184,12 +184,12 @@ type FrameFragment struct {
 	// mark that data was already masked
 	WasMaskedF    bool
 	PayloadDataPf httpsp.PField
-	//PayloadData   []byte
 }
 
 func (f *FrameFragment) Reset() {
 	f.Header = Header{}
-	//f.PayloadData = nil
+	f.WasMaskedF = false
+	f.PayloadDataPf = httpsp.PField{}
 }
 
 func (f FrameFragment) Len() uint64 {
