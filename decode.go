@@ -261,10 +261,10 @@ func (f *FrameFragment) Decode(b []byte, offset int) (int, error) {
 // Mask uses xor encryption for masking fragment payloads. Warning: it overwrites input memory.
 // See: https://www.rfc-editor.org/rfc/rfc6455.html#section-5.3
 func (f *FrameFragment) Mask(buf []byte) {
-	if f.WasMaskedF {
+	if !f.Header.MaskingF {
 		return
 	}
-	if !f.Header.MaskingF {
+	if f.WasMaskedF {
 		return
 	}
 	slice := f.PayloadDataPf.Get(buf)
