@@ -278,39 +278,68 @@ type Frame struct {
 	// all the frame's fragments
 	Fragments []FrameFragment
 	// this is the index of the last read and decoded fragment
-	Idx int
+	LastFragment int
+	// were all the fragments read?
+	CompleteF bool
+	// is the compression stateful (across the stream)?
+	StatefulCompression bool
+	// buffer used for internal defragmentation
+	payloadBuf    []byte
+	payloadBufLen int
+	bufWriter     bytes.Buffer
+	// low-level buffer reader (used for reading compressed input)
+	bufReader *bytes.Reader
+	// (de)flate reader
+	flateReader io.ReadCloser
 }
 
-// NewFrame returns a pointer to a newly initialized, empty frame which
-// has at most "capacity" fragments.
-func NewFrame(capacity int) *Frame {
-	return &Frame{
-		Fragments: make([]FrameFragment, capacity, capacity),
-		Idx:       0,
+// NewFrame returns a pointer to a newly initialized, empty frame which has at most 'maxFragments' fragments and
+// a payload of at most 'maxPayloadSize' bytes.
+func NewFrame(maxPayloadSize, maxFragments int) *Frame {
+	var frame Frame = Frame{
+		Fragments:     make([]FrameFragment, maxFragments, maxFragments),
+		LastFragment:  0,
+		payloadBuf:    make([]byte, maxPayloadSize+len(deflateNonCompressedEmptyBlock), maxPayloadSize+len(deflateNonCompressedEmptyBlock)),
+		payloadBufLen: 0,
 	}
+	for i, _ := range frame.Fragments[:] {
+		frame.Fragments[i].Reset()
+	}
+	frame.bufReader = bytes.NewReader(frame.payloadBuf)
+	frame.flateReader = flate.NewReader(nil)
+	return &frame
 }
 
 // Reset re-initializes all the fragments in the frame. It sets the index of
 // the last decoded fragment to 0.
 func (f *Frame) Reset() {
-	for _, frag := range f.Fragments[0:f.Idx] {
-		frag.Reset()
+	for i, _ := range f.Fragments[0:f.LastFragment] {
+		f.Fragments[i].Reset()
 	}
-	f.Idx = 0
+	f.LastFragment = 0
 }
 
 // Len returns the total length of the frame fragments (including headers)
 func (f Frame) Len() uint64 {
 	var l uint64 = 0
-	for _, frag := range f.Fragments[0:f.Idx] {
+	for _, frag := range f.Fragments[0:f.LastFragment] {
 		l += frag.Len()
 	}
 	return l
 }
 
+func (f Frame) Compressed() bool {
+	return f.Fragments[0].Compressed()
+}
+
+// Complete returns true if all the message fragments were read and false otherwise
+func (f Frame) Complete() bool {
+	return f.CompleteF
+}
+
 // Decoded returns "true" if all the fragments in the frame were decoded.
 func (f Frame) Decoded() bool {
-	for _, frag := range f.Fragments[0:f.Idx] {
+	for _, frag := range f.Fragments[0:f.LastFragment] {
 		if !frag.Header.DecodedF {
 			return false
 		}
@@ -321,20 +350,27 @@ func (f Frame) Decoded() bool {
 // PayloadLen returns the total length of the frame fragments' payloads (excluding headers)
 func (f Frame) PayloadLen() uint64 {
 	var l uint64 = 0
-	for _, frag := range f.Fragments[0:f.Idx] {
+	for _, frag := range f.Fragments[0:f.LastFragment] {
 		l += frag.Header.PayloadLen
 	}
 	return l
 }
 
-// Append appends a new fragment to the frame. Warning: the fragment should be decoded first!
-func (f *Frame) Append(fragment FrameFragment) {
-	if f.Idx < len(f.Fragments) {
-		f.Fragments[f.Idx] = fragment
-	} else {
-		f.Fragments = append(f.Fragments, fragment)
+func (f *Frame) NextFragment() *FrameFragment {
+	if f.LastFragment >= len(f.Fragments) {
+		fragments := make([]FrameFragment, len(f.Fragments), len(f.Fragments))
+		f.Fragments = append(f.Fragments, fragments...)
 	}
-	f.Idx++
+	fragment := &f.Fragments[f.LastFragment]
+	f.LastFragment++
+	return fragment
+}
+
+func (f *Frame) DropFragment() {
+	if f.LastFragment > 0 {
+		f.LastFragment--
+	}
+	f.Fragments[f.LastFragment].Reset()
 }
 
 // Decode decodes fragments from the input buffer "b" starting at "offset". Once decoded
@@ -342,8 +378,8 @@ func (f *Frame) Append(fragment FrameFragment) {
 // to iterate over the fragments in a frame:
 //
 // 	func (f Frame) DumpPayloadDataIterator(buf []byte) {
-//		for _, frag := range f.Fragments[0:f.Idx] {
-//			frag.Printf("payload data:%v\n", frag.PayloadDataPf.Get(buf))
+//		for _, frag := range f.Fragments[0:f.LastFragment] {
+//			fmt.Printf("payload data:%v\n", frag.PayloadDataPf.Get(buf))
 //      }
 //	}
 //
@@ -353,34 +389,30 @@ func (f *Frame) Append(fragment FrameFragment) {
 // "ErrHdrMoreBytes", "ErrDataMoreBytes" meaning that more data is needed for decoding the frame
 func (f *Frame) Decode(b []byte, offset int) (int, error) {
 	var (
-		fragmented bool
-		fragment   = FrameFragment{}
-		err        error
+		err error
 	)
 	for {
-		offset, err = fragment.Decode(b, offset)
+		fragment := f.NextFragment()
+		if offset, err = fragment.Decode(b, offset); err != ErrHdrOk {
+			fmt.Println("err: ", err)
+			f.DropFragment()
+			break
+		}
 		// control frames may be injected in between fragments
-		if !fragment.Ctrl() {
-			f.Append(fragment)
+		if fragment.Ctrl() {
+			f.DropFragment()
+			continue
 		}
 		if err == nil || err == ErrHdrOk {
-			if fragment.First() {
-				// this is a fragmented frame
-				fragmented = true
-			}
-			if fragment.OnlyOne() || fragment.Last() {
+			if fragment.Last() {
 				// it is either a stand-alone frame or it is the last fragment of the frame
-				break
-			}
-			if fragment.Ctrl() && !fragmented {
-				// only a control frame (which cannot be fragmented)
+				fmt.Printf("either not fragmented or last fragment\n")
+				f.CompleteF = true
 				break
 			}
 			// try to read next fragment
 			continue
 		}
-		// error while decoding the fragment
-		break
 	}
 	return offset, err
 }
@@ -389,14 +421,14 @@ func (f *Frame) Decode(b []byte, offset int) (int, error) {
 // Warning: it overwrites input memory.
 // See: https://www.rfc-editor.org/rfc/rfc6455.html#section-5.3
 func (f *Frame) Mask(buf []byte) {
-	for _, frag := range f.Fragments[0:f.Idx] {
+	for _, frag := range f.Fragments[0:f.LastFragment] {
 		frag.Mask(buf)
 	}
 }
 
 // FragmentCount returns the number of fragments in this frame
 func (f Frame) FragmentCount() int {
-	return f.Idx
+	return f.LastFragment
 }
 
 // Defragment unmasks fragments which were decoded from the "src" buffer and copies their payload
@@ -416,7 +448,7 @@ func (f *Frame) Defragment(dst, src []byte) ([]byte, int, error) {
 		return nil, 0, ErrFragBufTooSmall
 	}
 	offset := 0
-	for _, frag := range f.Fragments[0:f.Idx] {
+	for _, frag := range f.Fragments[0:f.LastFragment] {
 		slice := frag.PayloadDataPf.Get(src)
 		n := copy(dst[offset:], slice)
 		if n < int(frag.Header.PayloadLen) {
@@ -427,7 +459,70 @@ func (f *Frame) Defragment(dst, src []byte) ([]byte, int, error) {
 	return dst, offset, nil
 }
 
-// PayloadData is just another name for Defragment
-func (f *Frame) PayloadData(dst, src []byte) ([]byte, int, error) {
+// PayloadDataRaw returns the raw frame payload data without applying any Per-Message Extensions algorithm (i.e. PCME).
+func (f *Frame) PayloadDataRaw(dst, src []byte) ([]byte, int, error) {
 	return f.Defragment(dst, src)
+}
+
+// PayloadData returns the raw frame payload data after applying Per-Message Compression Extension.
+func (f *Frame) PayloadData(dst, src []byte) ([]byte, int, error) {
+	if f.Compressed() {
+		var err error
+		if _, f.payloadBufLen, err = f.Defragment(f.payloadBuf, src); err != nil {
+			return nil, 0, err
+		}
+		//fmt.Printf("payload: % x\n", f.payloadBuf[0:f.payloadBufLen])
+		return f.Deflate()
+	}
+	return f.Defragment(dst, src)
+}
+
+/*
+  https://www.rfc-editor.org/rfc/rfc7692.html#section-7.2.2
+
+
+	7.2.2.  Decompression
+
+	   An endpoint uses the following algorithm to decompress a message.
+
+	   1.  Append 4 octets of 0x00 0x00 0xff 0xff to the tail end of the
+		   payload of the message.
+
+	   2.  Decompress the resulting data using DEFLATE.
+
+	   If the "agreed parameters" contain the "server_no_context_takeover"
+	   extension parameter, the client MAY decompress each new message with
+	   an empty LZ77 sliding window.  Otherwise, the client MUST decompress
+	   each new message using the LZ77 sliding window used to process the
+	   last compressed message.
+
+	   If the "agreed parameters" contain the "client_no_context_takeover"
+	   extension parameter, the server MAY decompress each new message with
+	   an empty LZ77 sliding window.  Otherwise, the server MUST decompress
+	   each new message using the LZ77 sliding window used to process the
+	   last compressed message.  Note that even if the client has included
+	   the "client_no_context_takeover" extension parameter in its offer,
+	   the server MUST decompress each new message using the LZ77 sliding
+	   window used to process the last compressed message if the "agreed
+	   parameters" don't contain the "client_no_context_takeover" extension
+	   parameter.  The client-to-server "client_no_context_takeover"
+	   extension parameter is just a hint for the server to build an
+	   extension negotiation response.
+
+*/
+// Deflate decompresses the frame using PCME
+func (f *Frame) Deflate() ([]byte, int, error) {
+	copy(f.payloadBuf[f.payloadBufLen:], deflateNonCompressedEmptyBlock)
+	//fmt.Printf("payload: % x\n", f.payloadBuf[0:f.payloadBufLen+len(deflateNonCompressedEmptyBlock)])
+	f.bufReader.Reset(f.payloadBuf[0 : f.payloadBufLen+len(deflateNonCompressedEmptyBlock)])
+	if !f.StatefulCompression {
+		f.flateReader.(flate.Resetter).Reset(f.bufReader, nil)
+	}
+	f.bufWriter.Reset()
+	l, err := io.Copy(&f.bufWriter, f.flateReader)
+	if err != nil && err != io.ErrUnexpectedEOF {
+		return nil, 0, fmt.Errorf("frame deflate error: %w", err)
+	}
+	//fmt.Printf("copied %d bytes\n", l)
+	return f.bufWriter.Bytes(), int(l), err
 }
