@@ -31,7 +31,7 @@ var (
 
 // errors
 var (
-	ErrHdrOk           = errors.New("header OK")
+	ErrMsgOk           = errors.New("header OK")
 	ErrHdrMoreBytes    = errors.New("need more bytes for WebSocket frame header")
 	ErrDataMoreBytes   = errors.New("need more bytes for WebSocket frame data")
 	ErrFragBufTooSmall = errors.New("defragmentation buffer is too small")
@@ -151,7 +151,7 @@ func (f *Message) DropFragment() {
 //	}
 //
 // Please note that Decode does not perform masking!
-// In case of success it returns the offset where the new fragment should start and the error "ErrHdrOk"
+// In case of success it returns the offset where the new fragment should start and the error "ErrMsgOk"
 // In case of failure it returns the value of the input parameter "offset" and either of the errors:
 // "ErrHdrMoreBytes", "ErrDataMoreBytes" meaning that more data is needed for decoding the frame
 func (f *Message) Decode(b []byte, offset int) (int, error) {
@@ -160,7 +160,7 @@ func (f *Message) Decode(b []byte, offset int) (int, error) {
 	)
 	for {
 		fragment := f.NextFragment()
-		if offset, err = fragment.Decode(b, offset); err != ErrHdrOk {
+		if offset, err = fragment.Decode(b, offset); err != ErrMsgOk {
 			fmt.Println("err: ", err)
 			f.DropFragment()
 			break
@@ -170,7 +170,7 @@ func (f *Message) Decode(b []byte, offset int) (int, error) {
 			f.DropFragment()
 			continue
 		}
-		if err == nil || err == ErrHdrOk {
+		if err == nil || err == ErrMsgOk {
 			if fragment.Last() {
 				// it is either a stand-alone frame or it is the last fragment of the frame
 				fmt.Printf("either not fragmented or last fragment\n")

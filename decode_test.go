@@ -40,7 +40,7 @@ func TestDecoder(t *testing.T) {
 			0x48, 0x65, 0x6c, 0x6c, 0x6f,
 		}
 		message.Reset()
-		if offs, err := message.Decode(plainPkt[:], 0); err != ErrHdrOk {
+		if offs, err := message.Decode(plainPkt[:], 0); err != ErrMsgOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != int(message.Len()) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
@@ -60,7 +60,7 @@ func TestDecoder(t *testing.T) {
 			0x48, 0x65, 0x6c, 0x6c, 0x6f,
 		}
 		message.Reset()
-		if offs, err := message.Decode(maskedPkt[:], 0); err != ErrHdrOk {
+		if offs, err := message.Decode(maskedPkt[:], 0); err != ErrMsgOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != int(message.Len()) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
@@ -84,7 +84,7 @@ func TestDecoder(t *testing.T) {
 
 		// read first fragment
 		offs, err := message.Decode(plainPkt[:5], 0)
-		if err == ErrHdrOk {
+		if err == ErrMsgOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != int(message.Len()) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
@@ -97,7 +97,7 @@ func TestDecoder(t *testing.T) {
 		}
 
 		// read last fragment
-		if offs, err = message.Decode(plainPkt[:], offs); err != ErrHdrOk {
+		if offs, err = message.Decode(plainPkt[:], offs); err != ErrMsgOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != len(plainPkt) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
@@ -121,7 +121,7 @@ func TestDecoder(t *testing.T) {
 
 		// read first fragment
 		offs, err := message.Decode(plainPkt[:5], 0)
-		if err == ErrHdrOk {
+		if err == ErrMsgOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != int(message.Len()) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
@@ -134,7 +134,7 @@ func TestDecoder(t *testing.T) {
 			}
 		}
 		// read last fragment
-		if offs, err = message.Decode(plainPkt[:], offs); err != ErrHdrOk {
+		if offs, err = message.Decode(plainPkt[:], offs); err != ErrMsgOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != len(plainPkt) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
@@ -191,7 +191,7 @@ func TestDecoder(t *testing.T) {
 			0x20, 0x30, 0x0d, 0x0a, 0x0d, 0x0a,
 		}
 		message.Reset()
-		if offs, err := message.Decode(plainPkt[:], 0); err != ErrHdrOk {
+		if offs, err := message.Decode(plainPkt[:], 0); err != ErrMsgOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != int(message.Len()) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
@@ -220,7 +220,7 @@ func TestDecoder(t *testing.T) {
 		} else if offs != 0 {
 			t.Fatalf("decode error %s", err)
 		}
-		if offs, err := message.Decode(plainPkt[0:314], 0); err != ErrHdrOk {
+		if offs, err := message.Decode(plainPkt[0:314], 0); err != ErrMsgOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != plainPktCnt {
 			t.Fatalf("decode error %s", err)
@@ -301,7 +301,7 @@ func TestDecoder(t *testing.T) {
 			0x30, 0x0d, 0x0a, 0x0d, 0x0a,
 		}
 		message.Reset()
-		if offs, err := message.Decode(maskedPkt[:], 0); err != ErrHdrOk {
+		if offs, err := message.Decode(maskedPkt[:], 0); err != ErrMsgOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != maskedPktCnt {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
@@ -381,7 +381,7 @@ func TestDecoder(t *testing.T) {
 		}
 
 		message.Reset()
-		if offs, err := message.Decode(compressedPkt[:], 0); err != ErrHdrOk {
+		if offs, err := message.Decode(compressedPkt[:], 0); err != ErrMsgOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != len(compressedPkt) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
@@ -410,7 +410,7 @@ func TestDecoder(t *testing.T) {
 
 		// read first fragment
 		offs, err := message.Decode(compressedPkt[:13], 0)
-		if err == ErrHdrOk {
+		if err == ErrMsgOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != int(message.Len()) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
@@ -423,7 +423,7 @@ func TestDecoder(t *testing.T) {
 		}
 
 		// read last fragment
-		if offs, err = message.Decode(compressedPkt[:], offs); err != ErrHdrOk {
+		if offs, err = message.Decode(compressedPkt[:], offs); err != ErrMsgOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != len(compressedPkt) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
@@ -470,7 +470,7 @@ func BenchmarkDeflate(b *testing.B) {
 		}
 
 		message.Reset()
-		if _, err := message.Decode(compressedPkt[:], 0); err != ErrHdrOk {
+		if _, err := message.Decode(compressedPkt[:], 0); err != ErrMsgOk {
 			b.Fatalf("decode error %s", err)
 		}
 		var dst [2048]byte

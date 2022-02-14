@@ -116,7 +116,7 @@ func (h *Header) Decode(b []byte) error {
 	if h.MaskingF {
 		copy(h.MaskingKey[:], b[i:])
 	}
-	return ErrHdrOk
+	return ErrMsgOk
 }
 
 /*
@@ -200,10 +200,10 @@ func (f *Frame) Decode(b []byte, offset int) (int, error) {
 	if f.Header.DecodedF {
 		// this fragment was already decoded
 		fmt.Println("decoded")
-		return offset + int(f.Len()), ErrHdrOk
+		return offset + int(f.Len()), ErrMsgOk
 	}
 	currentBuf := b[offset:]
-	if err = f.Header.Decode(currentBuf); err == ErrHdrOk {
+	if err = f.Header.Decode(currentBuf); err == ErrMsgOk {
 		f.PayloadDataPf = httpsp.PField{
 			Offs: httpsp.OffsT(offset) + httpsp.OffsT(f.Header.Len()),
 			Len:  httpsp.OffsT(f.Header.PayloadLen),
@@ -213,7 +213,7 @@ func (f *Frame) Decode(b []byte, offset int) (int, error) {
 		}
 	}
 	switch err {
-	case ErrHdrOk:
+	case ErrMsgOk:
 		return offset + int(f.Len()), err
 	case ErrHdrMoreBytes, ErrDataMoreBytes:
 		fmt.Println("err:", err)
