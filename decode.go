@@ -233,23 +233,26 @@ func (f FrameFragment) PayloadData(b []byte) []byte {
 
 func (f *FrameFragment) Decode(b []byte, offset int) (int, error) {
 	var err error
-	currentBuf := b[offset:]
-	if !f.Header.DecodedF {
-		if err = f.Header.Decode(currentBuf); err == ErrHdrOk {
-			f.PayloadDataPf = httpsp.PField{
-				Offs: httpsp.OffsT(offset) + httpsp.OffsT(f.Header.Len()),
-				Len:  httpsp.OffsT(f.Header.PayloadLen),
-			}
-		}
+	if f.Header.DecodedF {
+		// this fragment was already decoded
+		fmt.Println("decoded")
+		return offset + int(f.Len()), ErrHdrOk
 	}
-	if err == ErrHdrOk && (len(currentBuf) < f.Header.Len()+int(f.Header.PayloadLen)) {
-		err = ErrDataMoreBytes
+	currentBuf := b[offset:]
+	if err = f.Header.Decode(currentBuf); err == ErrHdrOk {
+		f.PayloadDataPf = httpsp.PField{
+			Offs: httpsp.OffsT(offset) + httpsp.OffsT(f.Header.Len()),
+			Len:  httpsp.OffsT(f.Header.PayloadLen),
+		}
+		if len(currentBuf) < f.Header.Len()+int(f.Header.PayloadLen) {
+			err = ErrDataMoreBytes
+		}
 	}
 	switch err {
 	case ErrHdrOk:
-		//f.PayloadData = currentBuf[f.Header.Len():]
 		return offset + int(f.Len()), err
 	case ErrHdrMoreBytes, ErrDataMoreBytes:
+		fmt.Println("err:", err)
 		return offset, err
 	}
 	return offset, ErrCritical
