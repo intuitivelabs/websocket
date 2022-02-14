@@ -40,11 +40,12 @@ var (
 	ErrCritical        = errors.New("critical error")
 )
 
-type Frame struct {
-	// all the frame's fragments
-	Fragments []FrameFragment
+// A websockets message can be sent using a number of frames (by fragmenting it)
+type Message struct {
+	// all the message's fragments
+	Frames []Frame
 	// this is the index of the last read and decoded fragment
-	LastFragment int
+	LastFrame int
 	// were all the fragments read?
 	CompleteF bool
 	// is the compression stateful (across the stream)?
@@ -59,17 +60,17 @@ type Frame struct {
 	flateReader io.ReadCloser
 }
 
-// NewFrame returns a pointer to a newly initialized, empty frame which has at most 'maxFragments' fragments and
+// NewMessage returns a pointer to a newly initialized, empty message which has at most 'maxFrames' frames and
 // a payload of at most 'maxPayloadSize' bytes.
-func NewFrame(maxPayloadSize, maxFragments int) *Frame {
-	var frame Frame = Frame{
-		Fragments:     make([]FrameFragment, maxFragments, maxFragments),
-		LastFragment:  0,
+func NewMessage(maxPayloadSize, maxFrames int) *Message {
+	var frame Message = Message{
+		Frames:        make([]Frame, maxFrames, maxFrames),
+		LastFrame:     0,
 		payloadBuf:    make([]byte, maxPayloadSize+len(deflateNonCompressedEmptyBlock), maxPayloadSize+len(deflateNonCompressedEmptyBlock)),
 		payloadBufLen: 0,
 	}
-	for i, _ := range frame.Fragments[:] {
-		frame.Fragments[i].Reset()
+	for i, _ := range frame.Frames[:] {
+		frame.Frames[i].Reset()
 	}
 	frame.bufReader = bytes.NewReader(frame.payloadBuf)
 	frame.flateReader = flate.NewReader(nil)
@@ -78,34 +79,34 @@ func NewFrame(maxPayloadSize, maxFragments int) *Frame {
 
 // Reset re-initializes all the fragments in the frame. It sets the index of
 // the last decoded fragment to 0.
-func (f *Frame) Reset() {
-	for i, _ := range f.Fragments[0:f.LastFragment] {
-		f.Fragments[i].Reset()
+func (f *Message) Reset() {
+	for i, _ := range f.Frames[0:f.LastFrame] {
+		f.Frames[i].Reset()
 	}
-	f.LastFragment = 0
+	f.LastFrame = 0
 }
 
 // Len returns the total length of the frame fragments (including headers)
-func (f Frame) Len() uint64 {
+func (f Message) Len() uint64 {
 	var l uint64 = 0
-	for _, frag := range f.Fragments[0:f.LastFragment] {
+	for _, frag := range f.Frames[0:f.LastFrame] {
 		l += frag.Len()
 	}
 	return l
 }
 
-func (f Frame) Compressed() bool {
-	return f.Fragments[0].Compressed()
+func (f Message) Compressed() bool {
+	return f.Frames[0].Compressed()
 }
 
 // Complete returns true if all the message fragments were read and false otherwise
-func (f Frame) Complete() bool {
+func (f Message) Complete() bool {
 	return f.CompleteF
 }
 
 // Decoded returns "true" if all the fragments in the frame were decoded.
-func (f Frame) Decoded() bool {
-	for _, frag := range f.Fragments[0:f.LastFragment] {
+func (f Message) Decoded() bool {
+	for _, frag := range f.Frames[0:f.LastFrame] {
 		if !frag.Header.DecodedF {
 			return false
 		}
@@ -114,37 +115,37 @@ func (f Frame) Decoded() bool {
 }
 
 // PayloadLen returns the total length of the frame fragments' payloads (excluding headers)
-func (f Frame) PayloadLen() uint64 {
+func (f Message) PayloadLen() uint64 {
 	var l uint64 = 0
-	for _, frag := range f.Fragments[0:f.LastFragment] {
+	for _, frag := range f.Frames[0:f.LastFrame] {
 		l += frag.Header.PayloadLen
 	}
 	return l
 }
 
-func (f *Frame) NextFragment() *FrameFragment {
-	if f.LastFragment >= len(f.Fragments) {
-		fragments := make([]FrameFragment, len(f.Fragments), len(f.Fragments))
-		f.Fragments = append(f.Fragments, fragments...)
+func (f *Message) NextFragment() *Frame {
+	if f.LastFrame >= len(f.Frames) {
+		fragments := make([]Frame, len(f.Frames), len(f.Frames))
+		f.Frames = append(f.Frames, fragments...)
 	}
-	fragment := &f.Fragments[f.LastFragment]
-	f.LastFragment++
+	fragment := &f.Frames[f.LastFrame]
+	f.LastFrame++
 	return fragment
 }
 
-func (f *Frame) DropFragment() {
-	if f.LastFragment > 0 {
-		f.LastFragment--
+func (f *Message) DropFragment() {
+	if f.LastFrame > 0 {
+		f.LastFrame--
 	}
-	f.Fragments[f.LastFragment].Reset()
+	f.Frames[f.LastFrame].Reset()
 }
 
 // Decode decodes fragments from the input buffer "b" starting at "offset". Once decoded
-// fragments are stored in the "Frame" and can be further processed. For example here is how
+// fragments are stored in the "Message" and can be further processed. For example here is how
 // to iterate over the fragments in a frame:
 //
-// 	func (f Frame) DumpPayloadDataIterator(buf []byte) {
-//		for _, frag := range f.Fragments[0:f.LastFragment] {
+// 	func (f Message) DumpPayloadDataIterator(buf []byte) {
+//		for _, frag := range f.Frames[0:f.LastFrame] {
 //			fmt.Printf("payload data:%v\n", frag.PayloadDataPf.Get(buf))
 //      }
 //	}
@@ -153,7 +154,7 @@ func (f *Frame) DropFragment() {
 // In case of success it returns the offset where the new fragment should start and the error "ErrHdrOk"
 // In case of failure it returns the value of the input parameter "offset" and either of the errors:
 // "ErrHdrMoreBytes", "ErrDataMoreBytes" meaning that more data is needed for decoding the frame
-func (f *Frame) Decode(b []byte, offset int) (int, error) {
+func (f *Message) Decode(b []byte, offset int) (int, error) {
 	var (
 		err error
 	)
@@ -186,35 +187,35 @@ func (f *Frame) Decode(b []byte, offset int) (int, error) {
 // Mask uses xor encryption for masking all fragment payloads which are part of this frame.
 // Warning: it overwrites input memory.
 // See: https://www.rfc-editor.org/rfc/rfc6455.html#section-5.3
-func (f *Frame) Mask(buf []byte) {
-	for _, frag := range f.Fragments[0:f.LastFragment] {
+func (f *Message) Mask(buf []byte) {
+	for _, frag := range f.Frames[0:f.LastFrame] {
 		frag.Mask(buf)
 	}
 }
 
 // FragmentCount returns the number of fragments in this frame
-func (f Frame) FragmentCount() int {
-	return f.LastFragment
+func (f Message) FragmentCount() int {
+	return f.LastFrame
 }
 
 // Defragment unmasks fragments which were decoded from the "src" buffer and copies their payload
 // data into "dst" memory buffer. If there is only one fragment, no copy is performed.
 // It returns the buffer containing the unmasked payload data, its length and error if the operation
 // could not be performed correctly.
-func (f *Frame) Defragment(dst, src []byte) ([]byte, int, error) {
+func (f *Message) Defragment(dst, src []byte) ([]byte, int, error) {
 	if !f.Decoded() {
 		return nil, 0, ErrNotDecoded
 	}
 	f.Mask(src)
-	if len(f.Fragments) == 1 {
+	if len(f.Frames) == 1 {
 		// only one fragment
-		return f.Fragments[0].PayloadDataPf.Get(src), int(f.Fragments[0].PayloadDataPf.Len), nil
+		return f.Frames[0].PayloadDataPf.Get(src), int(f.Frames[0].PayloadDataPf.Len), nil
 	}
 	if int(f.PayloadLen()) > len(dst) {
 		return nil, 0, ErrFragBufTooSmall
 	}
 	offset := 0
-	for _, frag := range f.Fragments[0:f.LastFragment] {
+	for _, frag := range f.Frames[0:f.LastFrame] {
 		slice := frag.PayloadDataPf.Get(src)
 		n := copy(dst[offset:], slice)
 		if n < int(frag.Header.PayloadLen) {
@@ -226,12 +227,12 @@ func (f *Frame) Defragment(dst, src []byte) ([]byte, int, error) {
 }
 
 // PayloadDataRaw returns the raw frame payload data without applying any Per-Message Extensions algorithm (i.e. PCME).
-func (f *Frame) PayloadDataRaw(dst, src []byte) ([]byte, int, error) {
+func (f *Message) PayloadDataRaw(dst, src []byte) ([]byte, int, error) {
 	return f.Defragment(dst, src)
 }
 
 // PayloadData returns the raw frame payload data after applying Per-Message Compression Extension.
-func (f *Frame) PayloadData(dst, src []byte) ([]byte, int, error) {
+func (f *Message) PayloadData(dst, src []byte) ([]byte, int, error) {
 	if f.Compressed() {
 		var err error
 		if _, f.payloadBufLen, err = f.Defragment(f.payloadBuf, src); err != nil {
@@ -277,7 +278,7 @@ func (f *Frame) PayloadData(dst, src []byte) ([]byte, int, error) {
 
 */
 // Deflate decompresses the frame using PCME
-func (f *Frame) Deflate() ([]byte, int, error) {
+func (f *Message) Deflate() ([]byte, int, error) {
 	copy(f.payloadBuf[f.payloadBufLen:], deflateNonCompressedEmptyBlock)
 	//fmt.Printf("payload: % x\n", f.payloadBuf[0:f.payloadBufLen+len(deflateNonCompressedEmptyBlock)])
 	f.bufReader.Reset(f.payloadBuf[0 : f.payloadBufLen+len(deflateNonCompressedEmptyBlock)])
