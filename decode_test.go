@@ -20,7 +20,7 @@ func readPkt(dirName, fileName string, b []byte) (int, error) {
 func TestDecoder(t *testing.T) {
 	// set-up if needed
 	var plainPkt, maskedPkt [2048]byte
-	frame := NewFrame(64535, 10)
+	message := NewMessage(64535, 10)
 	dirName := "test_files"
 	fileName := "404"
 	plainPktCnt, readErr := readPkt(dirName, fileName, plainPkt[:])
@@ -39,15 +39,15 @@ func TestDecoder(t *testing.T) {
 		pktBytes := []byte{
 			0x48, 0x65, 0x6c, 0x6c, 0x6f,
 		}
-		frame.Reset()
-		if offs, err := frame.Decode(plainPkt[:], 0); err != ErrHdrOk {
+		message.Reset()
+		if offs, err := message.Decode(plainPkt[:], 0); err != ErrHdrOk {
 			t.Fatalf("decode error %s", err)
-		} else if offs != int(frame.Len()) {
-			t.Fatalf("expected offs: %d, got offs: %d", int(frame.Len()), offs)
+		} else if offs != int(message.Len()) {
+			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := frame.PayloadData(dst[:], plainPkt[:]); err != nil {
-			t.Fatalf("frame processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], plainPkt[:]); err != nil {
+			t.Fatalf("message processing error: %s", err)
 		} else if !bytes.Equal(pd[0:length], pktBytes) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes), string(pd[0:length]))
 		}
@@ -59,90 +59,90 @@ func TestDecoder(t *testing.T) {
 		pktBytes := []byte{
 			0x48, 0x65, 0x6c, 0x6c, 0x6f,
 		}
-		frame.Reset()
-		if offs, err := frame.Decode(maskedPkt[:], 0); err != ErrHdrOk {
+		message.Reset()
+		if offs, err := message.Decode(maskedPkt[:], 0); err != ErrHdrOk {
 			t.Fatalf("decode error %s", err)
-		} else if offs != int(frame.Len()) {
-			t.Fatalf("expected offs: %d, got offs: %d", int(frame.Len()), offs)
+		} else if offs != int(message.Len()) {
+			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := frame.PayloadData(dst[:], maskedPkt[:]); err != nil {
-			t.Fatalf("frame processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], maskedPkt[:]); err != nil {
+			t.Fatalf("message processing error: %s", err)
 		} else if !bytes.Equal(pd[0:length], pktBytes) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes), string(pd[0:length]))
 		}
 	})
 	t.Run("rfc6455 fragmented unmasked message", func(t *testing.T) {
 		plainPkt := []byte{
-			/*first frame*/ 0x01, 0x03, 0x48, 0x65, 0x6c,
-			/*last frame*/ 0x80, 0x02, 0x6c, 0x6f,
+			/*first message*/ 0x01, 0x03, 0x48, 0x65, 0x6c,
+			/*last message*/ 0x80, 0x02, 0x6c, 0x6f,
 		}
 		pktBytes := []byte{
 			0x48, 0x65, 0x6c, 0x6c, 0x6f,
 		}
-		frame.Reset()
+		message.Reset()
 
 		// read first fragment
-		offs, err := frame.Decode(plainPkt[:5], 0)
+		offs, err := message.Decode(plainPkt[:5], 0)
 		if err == ErrHdrOk {
 			t.Fatalf("decode error %s", err)
-		} else if offs != int(frame.Len()) {
-			t.Fatalf("expected offs: %d, got offs: %d", int(frame.Len()), offs)
+		} else if offs != int(message.Len()) {
+			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := frame.PayloadData(dst[:], plainPkt[:]); err != nil {
-			t.Fatalf("frame processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], plainPkt[:]); err != nil {
+			t.Fatalf("message processing error: %s", err)
 		} else if !bytes.Equal(pd[0:length], pktBytes[0:3]) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes[0:3]), string(pd[0:length]))
 		}
 
 		// read last fragment
-		if offs, err = frame.Decode(plainPkt[:], offs); err != ErrHdrOk {
+		if offs, err = message.Decode(plainPkt[:], offs); err != ErrHdrOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != len(plainPkt) {
-			t.Fatalf("expected offs: %d, got offs: %d", int(frame.Len()), offs)
+			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
-		if pd, length, err := frame.PayloadData(dst[:], plainPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
-			t.Fatalf("frame processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], plainPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
+			t.Fatalf("message processing error: %s", err)
 		} else if !bytes.Equal(pd[0:length], pktBytes) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes), string(pd[0:length]))
 		}
 	})
 	t.Run("iterating fragmented unmasked message", func(t *testing.T) {
 		plainPkt := []byte{
-			/*first frame*/ 0x01, 0x03, 0x48, 0x65, 0x6c,
-			/*last frame*/ 0x80, 0x02, 0x6c, 0x6f,
+			/*first message*/ 0x01, 0x03, 0x48, 0x65, 0x6c,
+			/*last message*/ 0x80, 0x02, 0x6c, 0x6f,
 		}
 		pktBytes := [][]byte{
 			{0x48, 0x65, 0x6c},
 			{0x6c, 0x6f},
 		}
-		frame.Reset()
+		message.Reset()
 
 		// read first fragment
-		offs, err := frame.Decode(plainPkt[:5], 0)
+		offs, err := message.Decode(plainPkt[:5], 0)
 		if err == ErrHdrOk {
 			t.Fatalf("decode error %s", err)
-		} else if offs != int(frame.Len()) {
-			t.Fatalf("expected offs: %d, got offs: %d", int(frame.Len()), offs)
-		} else if frame.LastFragment != 1 {
-			t.Fatalf("expected LastFragment: %d, got LastFragment: %d", 1, frame.LastFragment)
+		} else if offs != int(message.Len()) {
+			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
+		} else if message.LastFrame != 1 {
+			t.Fatalf("expected LastFrame: %d, got LastFrame: %d", 1, message.LastFrame)
 		}
-		for i, f := range frame.Fragments[0:frame.LastFragment] {
+		for i, f := range message.Frames[0:message.LastFrame] {
 			if !bytes.Equal(f.PayloadDataPf.Get(plainPkt[:5]), pktBytes[i]) {
 				t.Fatalf("payload data mismatch expected:\n%v\n, got:\n%v\n", pktBytes[i], f.PayloadDataPf.Get(plainPkt[:5]))
 			}
 		}
 		// read last fragment
-		if offs, err = frame.Decode(plainPkt[:], offs); err != ErrHdrOk {
+		if offs, err = message.Decode(plainPkt[:], offs); err != ErrHdrOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != len(plainPkt) {
-			t.Fatalf("expected offs: %d, got offs: %d", int(frame.Len()), offs)
-		} else if frame.LastFragment != 2 {
-			t.Fatalf("expected LastFragment: %d, got LastFragment: %d", 2, frame.LastFragment)
+			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
+		} else if message.LastFrame != 2 {
+			t.Fatalf("expected LastFrame: %d, got LastFrame: %d", 2, message.LastFrame)
 		}
-		for i, f := range frame.Fragments[0:frame.LastFragment] {
-			fmt.Printf("frame %d: %v\n", i, string(f.PayloadDataPf.Get(plainPkt[:])))
+		for i, f := range message.Frames[0:message.LastFrame] {
+			fmt.Printf("message %d: %v\n", i, string(f.PayloadDataPf.Get(plainPkt[:])))
 			if !bytes.Equal(f.PayloadDataPf.Get(plainPkt[:]), pktBytes[i]) {
 				t.Fatalf("payload data mismatch expected:\n%v\n, got:\n%v\n", pktBytes[i], f.PayloadDataPf.Get(plainPkt[:]))
 			}
@@ -190,37 +190,37 @@ func TestDecoder(t *testing.T) {
 			0x2d, 0x4c, 0x65, 0x6e, 0x67, 0x74, 0x68, 0x3a,
 			0x20, 0x30, 0x0d, 0x0a, 0x0d, 0x0a,
 		}
-		frame.Reset()
-		if offs, err := frame.Decode(plainPkt[:], 0); err != ErrHdrOk {
+		message.Reset()
+		if offs, err := message.Decode(plainPkt[:], 0); err != ErrHdrOk {
 			t.Fatalf("decode error %s", err)
-		} else if offs != int(frame.Len()) {
-			t.Fatalf("expected offs: %d, got offs: %d", int(frame.Len()), offs)
+		} else if offs != int(message.Len()) {
+			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := frame.PayloadData(dst[:], plainPkt[:]); err != nil {
-			t.Fatalf("frame processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], plainPkt[:]); err != nil {
+			t.Fatalf("message processing error: %s", err)
 		} else if !bytes.Equal(pd[0:length], pktBytes) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes), string(pd[0:length]))
 		}
 	})
 	t.Run("plain partial", func(t *testing.T) {
-		frame.Reset()
-		if offs, err := frame.Decode(plainPkt[0:3], 0); err != ErrHdrMoreBytes {
+		message.Reset()
+		if offs, err := message.Decode(plainPkt[0:3], 0); err != ErrHdrMoreBytes {
 			t.Fatalf("decode error: %s", err)
 		} else if offs != 0 {
 			t.Fatalf("decode error: %s", err)
 		}
-		if offs, err := frame.Decode(plainPkt[0:4], 0); err != ErrDataMoreBytes {
+		if offs, err := message.Decode(plainPkt[0:4], 0); err != ErrDataMoreBytes {
 			t.Fatalf("decode error %s", err)
 		} else if offs != 0 {
 			t.Fatalf("decode error %s", err)
 		}
-		if offs, err := frame.Decode(plainPkt[0:100], 0); err != ErrDataMoreBytes {
+		if offs, err := message.Decode(plainPkt[0:100], 0); err != ErrDataMoreBytes {
 			t.Fatalf("decode error %s", err)
 		} else if offs != 0 {
 			t.Fatalf("decode error %s", err)
 		}
-		if offs, err := frame.Decode(plainPkt[0:314], 0); err != ErrHdrOk {
+		if offs, err := message.Decode(plainPkt[0:314], 0); err != ErrHdrOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != plainPktCnt {
 			t.Fatalf("decode error %s", err)
@@ -300,15 +300,15 @@ func TestDecoder(t *testing.T) {
 			0x4c, 0x65, 0x6e, 0x67, 0x74, 0x68, 0x3a, 0x20,
 			0x30, 0x0d, 0x0a, 0x0d, 0x0a,
 		}
-		frame.Reset()
-		if offs, err := frame.Decode(maskedPkt[:], 0); err != ErrHdrOk {
+		message.Reset()
+		if offs, err := message.Decode(maskedPkt[:], 0); err != ErrHdrOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != maskedPktCnt {
-			t.Fatalf("expected offs: %d, got offs: %d", int(frame.Len()), offs)
+			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := frame.PayloadData(dst[:], maskedPkt[:]); err != nil {
-			t.Fatalf("frame processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], maskedPkt[:]); err != nil {
+			t.Fatalf("message processing error: %s", err)
 		} else if !bytes.Equal(pd[0:length], pktBytes) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes), string(pd[0:length]))
 		}
@@ -380,15 +380,15 @@ func TestDecoder(t *testing.T) {
 			0x5d, 0x7d,
 		}
 
-		frame.Reset()
-		if offs, err := frame.Decode(compressedPkt[:], 0); err != ErrHdrOk {
+		message.Reset()
+		if offs, err := message.Decode(compressedPkt[:], 0); err != ErrHdrOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != len(compressedPkt) {
-			t.Fatalf("expected offs: %d, got offs: %d", int(frame.Len()), offs)
+			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := frame.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
-			t.Fatalf("frame processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
+			t.Fatalf("message processing error: %s", err)
 		} else if !bytes.Equal(pd[0:length], plainPkt) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkt), string(pd[0:length]))
 		}
@@ -406,30 +406,30 @@ func TestDecoder(t *testing.T) {
 			0x48, 0x65, 0x6c, 0x6c, 0x6f,
 		}
 
-		frame.Reset()
+		message.Reset()
 
 		// read first fragment
-		offs, err := frame.Decode(compressedPkt[:13], 0)
+		offs, err := message.Decode(compressedPkt[:13], 0)
 		if err == ErrHdrOk {
 			t.Fatalf("decode error %s", err)
-		} else if offs != int(frame.Len()) {
-			t.Fatalf("expected offs: %d, got offs: %d", int(frame.Len()), offs)
+		} else if offs != int(message.Len()) {
+			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := frame.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
-			t.Fatalf("frame processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
+			t.Fatalf("message processing error: %s", err)
 		} else if !bytes.Equal(pd[0:length], plainPkt) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkt), string(pd[0:length]))
 		}
 
 		// read last fragment
-		if offs, err = frame.Decode(compressedPkt[:], offs); err != ErrHdrOk {
+		if offs, err = message.Decode(compressedPkt[:], offs); err != ErrHdrOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != len(compressedPkt) {
-			t.Fatalf("expected offs: %d, got offs: %d", int(frame.Len()), offs)
+			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
-		if pd, length, err := frame.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
-			t.Fatalf("frame processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
+			t.Fatalf("message processing error: %s", err)
 		} else if !bytes.Equal(pd[0:length], plainPkt) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkt), string(pd[0:length]))
 		}
@@ -438,7 +438,7 @@ func TestDecoder(t *testing.T) {
 
 func BenchmarkDeflate(b *testing.B) {
 	b.Run("compressed", func(b *testing.B) {
-		frame := NewFrame(64535, 10)
+		message := NewMessage(64535, 10)
 		compressedPkt := []byte{
 			0xc1, 0x7e, 0x00, 0xd3, 0x2c, 0x8d, 0x4f, 0x6b,
 			0x02, 0x31, 0x10, 0xc5, 0xbf, 0xca, 0x90, 0x93,
@@ -469,15 +469,15 @@ func BenchmarkDeflate(b *testing.B) {
 			0xff, 0x63, 0xe4, 0xf6, 0x79, 0xfb, 0x05,
 		}
 
-		frame.Reset()
-		if _, err := frame.Decode(compressedPkt[:], 0); err != ErrHdrOk {
+		message.Reset()
+		if _, err := message.Decode(compressedPkt[:], 0); err != ErrHdrOk {
 			b.Fatalf("decode error %s", err)
 		}
 		var dst [2048]byte
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			if _, _, err := frame.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
-				b.Fatalf("frame processing error: %s", err)
+			if _, _, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
+				b.Fatalf("message processing error: %s", err)
 			}
 		}
 	})
