@@ -143,59 +143,59 @@ func (h *Header) Decode(b []byte) error {
      +---------------------------------------------------------------+
 
 */
-type FrameFragment struct {
+type Frame struct {
 	Header Header
 	// mark that data was already masked
 	WasMaskedF    bool
 	PayloadDataPf httpsp.PField
 }
 
-func (f *FrameFragment) Reset() {
+func (f *Frame) Reset() {
 	f.Header = Header{}
 	f.WasMaskedF = false
 	f.PayloadDataPf = httpsp.PField{}
 }
 
-func (f FrameFragment) Len() uint64 {
+func (f Frame) Len() uint64 {
 	if !f.Header.DecodedF {
 		return 0
 	}
 	return uint64(f.Header.Len()) + f.Header.PayloadLen
 }
 
-func (f FrameFragment) Ctrl() bool {
+func (f Frame) Ctrl() bool {
 	return f.Header.Opcode >= CloseOp
 }
 
-func (f FrameFragment) First() bool {
+func (f Frame) First() bool {
 	return f.Header.Opcode != ContOp
 }
 
-func (f FrameFragment) Continuation() bool {
+func (f Frame) Continuation() bool {
 	return !f.Header.FinF && f.Header.Opcode == ContOp
 }
 
-func (f FrameFragment) Last() bool {
+func (f Frame) Last() bool {
 	return f.Header.FinF
 }
 
-func (f FrameFragment) OnlyOne() bool {
+func (f Frame) OnlyOne() bool {
 	return f.First() && f.Last()
 }
 
-func (f FrameFragment) Compressed() bool {
+func (f Frame) Compressed() bool {
 	return f.Header.Rsv1F && f.First()
 }
 
-func (f FrameFragment) Pf() httpsp.PField {
+func (f Frame) Pf() httpsp.PField {
 	return f.PayloadDataPf
 }
 
-func (f FrameFragment) PayloadData(b []byte) []byte {
+func (f Frame) PayloadData(b []byte) []byte {
 	return f.PayloadDataPf.Get(b)
 }
 
-func (f *FrameFragment) Decode(b []byte, offset int) (int, error) {
+func (f *Frame) Decode(b []byte, offset int) (int, error) {
 	var err error
 	if f.Header.DecodedF {
 		// this fragment was already decoded
@@ -224,7 +224,7 @@ func (f *FrameFragment) Decode(b []byte, offset int) (int, error) {
 
 // Mask uses xor encryption for masking fragment payloads. Warning: it overwrites input memory.
 // See: https://www.rfc-editor.org/rfc/rfc6455.html#section-5.3
-func (f *FrameFragment) Mask(buf []byte) {
+func (f *Frame) Mask(buf []byte) {
 	if !f.Header.MaskingF {
 		return
 	}
