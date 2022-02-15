@@ -195,7 +195,7 @@ func (f Frame) PayloadData(b []byte) []byte {
 	return f.PayloadDataPf.Get(b)
 }
 
-func (f *Frame) Decode(b []byte, offset int) (int, error) {
+func (f *Frame) Decode(b []byte, offset int, mask bool) (int, error) {
 	var err error
 	if f.Header.DecodedF {
 		// this fragment was already decoded
@@ -203,23 +203,20 @@ func (f *Frame) Decode(b []byte, offset int) (int, error) {
 		return offset + int(f.Len()), ErrMsgOk
 	}
 	currentBuf := b[offset:]
-	if err = f.Header.Decode(currentBuf); err == ErrMsgOk {
-		f.PayloadDataPf = httpsp.PField{
-			Offs: httpsp.OffsT(offset) + httpsp.OffsT(f.Header.Len()),
-			Len:  httpsp.OffsT(f.Header.PayloadLen),
-		}
-		if len(currentBuf) < f.Header.Len()+int(f.Header.PayloadLen) {
-			err = ErrDataMoreBytes
-		}
-	}
-	switch err {
-	case ErrMsgOk:
-		return offset + int(f.Len()), err
-	case ErrHdrMoreBytes, ErrDataMoreBytes:
-		fmt.Println("err:", err)
+	if err = f.Header.Decode(currentBuf); err != ErrMsgOk {
 		return offset, err
 	}
-	return offset, ErrCritical
+	if len(currentBuf) < f.Header.Len()+int(f.Header.PayloadLen) {
+		return offset, ErrDataMoreBytes
+	}
+	f.PayloadDataPf = httpsp.PField{
+		Offs: httpsp.OffsT(offset) + httpsp.OffsT(f.Header.Len()),
+		Len:  httpsp.OffsT(f.Header.PayloadLen),
+	}
+	if mask {
+		f.Mask(b)
+	}
+	return offset + int(f.Len()), ErrMsgOk
 }
 
 // Mask uses xor encryption for masking fragment payloads. Warning: it overwrites input memory.

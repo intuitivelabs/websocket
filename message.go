@@ -140,9 +140,10 @@ func (f *Message) DropFragment() {
 	f.Frames[f.LastFrame].Reset()
 }
 
-// Decode decodes fragments from the input buffer "b" starting at "offset". Once decoded
-// fragments are stored in the "Message" and can be further processed. For example here is how
-// to iterate over the fragments in a frame:
+// Decode decodes fragments from the input buffer "b" starting at "offset"; "mask" flag controls if the
+// masking should be performed on the payload.
+// Once decoded fragments are stored in the "Message" and can be further processed.
+// For example here is how to iterate over the fragments in a frame:
 //
 // 	func (f Message) DumpPayloadDataIterator(buf []byte) {
 //		for _, frag := range f.Frames[0:f.LastFrame] {
@@ -150,17 +151,16 @@ func (f *Message) DropFragment() {
 //      }
 //	}
 //
-// Please note that Decode does not perform masking!
 // In case of success it returns the offset where the new fragment should start and the error "ErrMsgOk"
 // In case of failure it returns the value of the input parameter "offset" and either of the errors:
 // "ErrHdrMoreBytes", "ErrDataMoreBytes" meaning that more data is needed for decoding the frame
-func (f *Message) Decode(b []byte, offset int) (int, error) {
+func (f *Message) Decode(b []byte, offset int, mask bool) (int, error) {
 	var (
 		err error
 	)
 	for {
 		fragment := f.NextFragment()
-		if offset, err = fragment.Decode(b, offset); err != ErrMsgOk {
+		if offset, err = fragment.Decode(b, offset, mask); err != ErrMsgOk {
 			fmt.Println("err: ", err)
 			f.DropFragment()
 			break
