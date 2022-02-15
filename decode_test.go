@@ -17,7 +17,7 @@ func readPkt(dirName, fileName string, b []byte) (int, error) {
 	return n, readErr
 }
 
-func TestDecoder(t *testing.T) {
+func TestDecoderUncompressed(t *testing.T) {
 	// set-up if needed
 	var plainPkt, maskedPkt [2048]byte
 	message := NewMessage(64535, 10)
@@ -313,6 +313,133 @@ func TestDecoder(t *testing.T) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes), string(pd[0:length]))
 		}
 	})
+}
+
+func TestDecoderCompressed(t *testing.T) {
+	message := NewMessage(64535, 10)
+	// https://www.rfc-editor.org/rfc/rfc7692.html#section-7.2.3 Examples
+	// https://www.rfc-editor.org/rfc/rfc7692.html#section-7.2.3.1
+	t.Run("rfc7692 one deflate block", func(t *testing.T) {
+		compressedPkt := []byte{
+			0xc1, 0x07, 0xf2, 0x48, 0xcd, 0xc9, 0xc9, 0x07,
+			0x00,
+		}
+
+		plainPkt := []byte{
+			0x48, 0x65, 0x6c, 0x6c, 0x6f,
+		}
+
+		message.Reset()
+		if offs, err := message.Decode(compressedPkt[:], 0, true); err != ErrMsgOk {
+			t.Fatalf("decode error %s", err)
+		} else if offs != len(compressedPkt) {
+			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
+		}
+		var dst [2048]byte
+		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
+			t.Fatalf("message processing error: %s", err)
+		} else if !bytes.Equal(pd[0:length], plainPkt) {
+			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkt), string(pd[0:length]))
+		}
+	})
+	t.Run("rfc7692 one deflate block fragmented", func(t *testing.T) {
+		compressedPkt := []byte{
+			/*first fragment*/
+			0x41, 0x03, 0xf2, 0x48, 0xcd,
+			/*last fragment*/
+			0x80, 0x04, 0xc9, 0xc9, 0x07, 0x00,
+		}
+
+		plainPkt := []byte{
+			0x48, 0x65, 0x6c, 0x6c, 0x6f,
+		}
+
+		message.Reset()
+		if offs, err := message.Decode(compressedPkt[:], 0, true); err != ErrMsgOk {
+			t.Fatalf("decode error %s", err)
+		} else if offs != len(compressedPkt) {
+			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
+		}
+		var dst [2048]byte
+		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
+			t.Fatalf("message processing error: %s", err)
+		} else if !bytes.Equal(pd[0:length], plainPkt) {
+			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkt), string(pd[0:length]))
+		}
+	})
+	// https://www.rfc-editor.org/rfc/rfc7692.html#section-7.2.3.3
+	t.Run("rfc7692 one deflate block w/ no compression", func(t *testing.T) {
+		compressedPkt := []byte{
+			0xc1, 0x0b, 0x00, 0x05, 0x00, 0xfa, 0xff, 0x48,
+			0x65, 0x6c, 0x6c, 0x6f, 0x00,
+		}
+
+		plainPkt := []byte{
+			0x48, 0x65, 0x6c, 0x6c, 0x6f,
+		}
+
+		message.Reset()
+		if offs, err := message.Decode(compressedPkt[:], 0, true); err != ErrMsgOk {
+			t.Fatalf("decode error %s", err)
+		} else if offs != len(compressedPkt) {
+			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
+		}
+		var dst [2048]byte
+		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
+			t.Fatalf("message processing error: %s", err)
+		} else if !bytes.Equal(pd[0:length], plainPkt) {
+			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkt), string(pd[0:length]))
+		}
+	})
+	// https://www.rfc-editor.org/rfc/rfc7692.html#section-7.2.3.4
+	t.Run("rfc7692 one deflate block w/ BFINAL set to 1", func(t *testing.T) {
+		compressedPkt := []byte{
+			0xc1, 0x08, 0xf3, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00, 0x00,
+		}
+
+		plainPkt := []byte{
+			0x48, 0x65, 0x6c, 0x6c, 0x6f,
+		}
+
+		message.Reset()
+		if offs, err := message.Decode(compressedPkt[:], 0, true); err != ErrMsgOk {
+			t.Fatalf("decode error %s", err)
+		} else if offs != len(compressedPkt) {
+			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
+		}
+		var dst [2048]byte
+		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
+			t.Fatalf("message processing error: %s", err)
+		} else if !bytes.Equal(pd[0:length], plainPkt) {
+			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkt), string(pd[0:length]))
+		}
+	})
+	// https://www.rfc-editor.org/rfc/rfc7692.html#section-7.2.3.5
+	t.Run("rfc7692 two deflate blocks in one message", func(t *testing.T) {
+		compressedPkt := []byte{
+			0xc1, 0x0d, 0xf2, 0x48, 0x05, 0x00, 0x00, 0x00,
+			0xff, 0xff, 0xca, 0xc9, 0xc9, 0x07, 0x00,
+		}
+
+		plainPkt := []byte{
+			0x48, 0x65, 0x6c, 0x6c, 0x6f,
+		}
+
+		message.Reset()
+		if offs, err := message.Decode(compressedPkt[:], 0, true); err != ErrMsgOk {
+			t.Fatalf("decode error %s", err)
+		} else if offs != len(compressedPkt) {
+			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
+		}
+		var dst [2048]byte
+		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
+			t.Fatalf("message processing error: %s", err)
+		} else if !bytes.Equal(pd[0:length], plainPkt) {
+			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkt), string(pd[0:length]))
+		}
+	})
+
+	// packets generated by libwebsockets
 	t.Run("compressed libwebsockets", func(t *testing.T) {
 		compressedPkt := []byte{
 			0xc1, 0x7e, 0x00, 0xd3, 0x2c, 0x8d, 0x4f, 0x6b,
