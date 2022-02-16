@@ -74,6 +74,7 @@ type Header struct {
 	PayloadLenInd uint8
 	PayloadLen    uint64
 	MaskingKey    [4]byte
+	Pf            httpsp.PField
 }
 
 func (h Header) Len() int {
@@ -91,6 +92,20 @@ func (h Header) Len() int {
 		length += 4
 	}
 	return length
+}
+
+func (h *Header) DecodeWithOffset(b []byte, offset int) error {
+	if offset > len(b) {
+		return ErrBUG
+	}
+	err := h.Decode(b[offset:])
+	if err == ErrMsgOk {
+		h.Pf = httpsp.PField{
+			Offs: httpsp.OffsT(offset),
+			Len:  httpsp.OffsT(h.Len()),
+		}
+	}
+	return err
 }
 
 func (h *Header) Decode(b []byte) error {
@@ -154,14 +169,14 @@ func (h *Header) Decode(b []byte) error {
 type Frame struct {
 	Header Header
 	// mark that data was already masked
-	WasMaskedF    bool
+	WasMaskedF bool
+	// is the frame already decoded?
+	DecodedF      bool
 	PayloadDataPf httpsp.PField
 }
 
 func (f *Frame) Reset() {
-	f.Header = Header{}
-	f.WasMaskedF = false
-	f.PayloadDataPf = httpsp.PField{}
+	*f = Frame{}
 }
 
 func (f Frame) Len() uint64 {
@@ -205,14 +220,20 @@ func (f Frame) PayloadData(b []byte) []byte {
 
 func (f *Frame) Decode(b []byte, offset int, mask bool) (int, error) {
 	var err error
+	if f.DecodedF {
+		return offset, ErrFrameAlreadyDecoded
+	}
 	if offset > len(b) {
 		return offset, ErrBUG
 	}
 	currentBuf := b[offset:]
 	if !f.Header.DecodedF {
-		if err = f.Header.Decode(currentBuf); err != ErrMsgOk {
+		if err = f.Header.DecodeWithOffset(b, offset); err != ErrMsgOk {
 			return offset, err
 		}
+	}
+	if offset != int(f.Header.Pf.Offs) {
+		return offset, ErrWrongOffset
 	}
 	if len(currentBuf) < f.Header.Len()+int(f.Header.PayloadLen) {
 		return offset, ErrDataMoreBytes
@@ -224,6 +245,7 @@ func (f *Frame) Decode(b []byte, offset int, mask bool) (int, error) {
 	if mask {
 		f.Mask(b)
 	}
+	f.DecodedF = true
 	return offset + int(f.Len()), ErrMsgOk
 }
 
