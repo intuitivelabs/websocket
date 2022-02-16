@@ -197,14 +197,11 @@ func (f Frame) PayloadData(b []byte) []byte {
 
 func (f *Frame) Decode(b []byte, offset int, mask bool) (int, error) {
 	var err error
-	if f.Header.DecodedF {
-		// this fragment was already decoded
-		fmt.Println("decoded")
-		return offset + int(f.Len()), ErrMsgOk
-	}
 	currentBuf := b[offset:]
-	if err = f.Header.Decode(currentBuf); err != ErrMsgOk {
-		return offset, err
+	if !f.Header.DecodedF {
+		if err = f.Header.Decode(currentBuf); err != ErrMsgOk {
+			return offset, err
+		}
 	}
 	if len(currentBuf) < f.Header.Len()+int(f.Header.PayloadLen) {
 		return offset, ErrDataMoreBytes
