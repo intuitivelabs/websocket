@@ -1,7 +1,18 @@
 package websocket
 
 import (
+	"errors"
 	"github.com/intuitivelabs/httpsp"
+)
+
+// errors
+var (
+	ErrMsgOk               = errors.New("header OK")
+	ErrHdrMoreBytes        = errors.New("need more bytes for WebSocket frame header")
+	ErrDataMoreBytes       = errors.New("need more bytes for WebSocket frame data")
+	ErrWrongOffset         = errors.New("wrong buffer offset")
+	ErrFrameAlreadyDecoded = errors.New("frame was already decoded")
+	ErrBUG                 = errors.New("BUG")
 )
 
 // Fin, Reserved flags & opcode bitmask
