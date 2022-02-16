@@ -1,7 +1,6 @@
 package websocket
 
 import (
-	"fmt"
 	"github.com/intuitivelabs/httpsp"
 )
 
@@ -85,7 +84,6 @@ func (h Header) Len() int {
 
 func (h *Header) Decode(b []byte) error {
 	h.DecodedF = false
-	fmt.Printf("len(b): %d\n", len(b))
 	if len(b) < MinFrameLen {
 		return ErrHdrMoreBytes
 	}
@@ -100,7 +98,6 @@ func (h *Header) Decode(b []byte) error {
 	h.PayloadLenInd = maskPayloadLen & PayloadLenBM
 	h.PayloadLen = uint64(h.PayloadLenInd)
 	h.DecodedF = true
-	fmt.Printf("h.Len(): %d\n", h.Len())
 	if len(b) < h.Len() {
 		h.DecodedF = false
 		return ErrHdrMoreBytes

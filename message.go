@@ -165,7 +165,6 @@ func (f *Message) Decode(b []byte, offset int, mask bool) (int, error) {
 	for {
 		fragment := f.NextFragment()
 		if offset, err = fragment.Decode(b, offset, mask); err != ErrMsgOk {
-			fmt.Println("err: ", err)
 			f.DropFragment()
 			break
 		}
@@ -177,7 +176,6 @@ func (f *Message) Decode(b []byte, offset int, mask bool) (int, error) {
 		if err == nil || err == ErrMsgOk {
 			if fragment.Last() {
 				// it is either a stand-alone frame or it is the last fragment of the frame
-				fmt.Printf("either not fragmented or last fragment\n")
 				f.CompleteF = true
 				break
 			}
@@ -242,7 +240,6 @@ func (f *Message) PayloadData(dst, src []byte) ([]byte, int, error) {
 		if _, f.payloadBufLen, err = f.Defragment(f.payloadBuf, src); err != nil {
 			return nil, 0, err
 		}
-		//fmt.Printf("payload: % x\n", f.payloadBuf[0:f.payloadBufLen])
 		return f.Deflate()
 	}
 	return f.Defragment(dst, src)
@@ -287,7 +284,6 @@ func (f *Message) Deflate() ([]byte, int, error) {
 		return nil, 0, ErrDeflateBufTooSmall
 	}
 	copy(f.payloadBuf[f.payloadBufLen:], deflateNonCompressedEmptyBlock)
-	//fmt.Printf("payload: % x\n", f.payloadBuf[0:f.payloadBufLen+len(deflateNonCompressedEmptyBlock)])
 	f.bufReader.Reset(f.payloadBuf[0 : f.payloadBufLen+len(deflateNonCompressedEmptyBlock)])
 	if f.StatefulCompression {
 		f.flateReader.(flate.Resetter).Reset(f.bufReader, f.bufWriter.Bytes())
@@ -299,6 +295,5 @@ func (f *Message) Deflate() ([]byte, int, error) {
 	if err != nil && err != io.ErrUnexpectedEOF {
 		return nil, 0, fmt.Errorf("frame deflate error: %w", err)
 	}
-	//fmt.Printf("copied %d bytes\n", l)
 	return f.bufWriter.Bytes(), int(l), err
 }
