@@ -31,13 +31,14 @@ var (
 
 // errors
 var (
-	ErrMsgOk           = errors.New("header OK")
-	ErrHdrMoreBytes    = errors.New("need more bytes for WebSocket frame header")
-	ErrDataMoreBytes   = errors.New("need more bytes for WebSocket frame data")
-	ErrFragBufTooSmall = errors.New("defragmentation buffer is too small")
-	ErrFragCopy        = errors.New("fragment copy failure")
-	ErrNotDecoded      = errors.New("frame (fragment) is not decoded")
-	ErrCritical        = errors.New("critical error")
+	ErrMsgOk              = errors.New("header OK")
+	ErrHdrMoreBytes       = errors.New("need more bytes for WebSocket frame header")
+	ErrDataMoreBytes      = errors.New("need more bytes for WebSocket frame data")
+	ErrFragBufTooSmall    = errors.New("defragmentation buffer is too small")
+	ErrFragCopy           = errors.New("fragment copy failure")
+	ErrNotDecoded         = errors.New("frame (fragment) is not decoded")
+	ErrDeflateBufTooSmall = errors.New("deflate buffer is too small")
+	ErrCritical           = errors.New("critical error")
 )
 
 // A websockets message can be sent using a number of frames (by fragmenting it)
@@ -62,18 +63,20 @@ type Message struct {
 
 // NewMessage returns a pointer to a newly initialized, empty message which has at most 'maxFrames' frames and
 // a payload of at most 'maxPayloadSize' bytes.
-func NewMessage(maxPayloadSize, maxFrames int) *Message {
+func NewMessage(maxPayloadSize, maxFrames int, statefulCompression bool) *Message {
 	var frame Message = Message{
-		Frames:        make([]Frame, maxFrames, maxFrames),
-		LastFrame:     0,
-		payloadBuf:    make([]byte, maxPayloadSize+len(deflateNonCompressedEmptyBlock), maxPayloadSize+len(deflateNonCompressedEmptyBlock)),
-		payloadBufLen: 0,
+		Frames:              make([]Frame, maxFrames, maxFrames),
+		LastFrame:           0,
+		payloadBuf:          make([]byte, maxPayloadSize+len(deflateNonCompressedEmptyBlock), maxPayloadSize+len(deflateNonCompressedEmptyBlock)),
+		payloadBufLen:       0,
+		StatefulCompression: statefulCompression,
 	}
 	for i, _ := range frame.Frames[:] {
 		frame.Frames[i].Reset()
 	}
 	frame.bufReader = bytes.NewReader(frame.payloadBuf)
-	frame.flateReader = flate.NewReader(nil)
+	frame.flateReader = flate.NewReader(frame.bufReader)
+	frame.bufWriter.Reset()
 	return &frame
 }
 
@@ -279,13 +282,18 @@ func (f *Message) PayloadData(dst, src []byte) ([]byte, int, error) {
 */
 // Deflate decompresses the frame using PCME
 func (f *Message) Deflate() ([]byte, int, error) {
+	if len(f.payloadBuf[f.payloadBufLen:]) < len(deflateNonCompressedEmptyBlock) {
+		return nil, 0, ErrDeflateBufTooSmall
+	}
 	copy(f.payloadBuf[f.payloadBufLen:], deflateNonCompressedEmptyBlock)
 	//fmt.Printf("payload: % x\n", f.payloadBuf[0:f.payloadBufLen+len(deflateNonCompressedEmptyBlock)])
 	f.bufReader.Reset(f.payloadBuf[0 : f.payloadBufLen+len(deflateNonCompressedEmptyBlock)])
-	if !f.StatefulCompression {
+	if f.StatefulCompression {
+		f.flateReader.(flate.Resetter).Reset(f.bufReader, f.bufWriter.Bytes())
+	} else {
 		f.flateReader.(flate.Resetter).Reset(f.bufReader, nil)
+		f.bufWriter.Reset()
 	}
-	f.bufWriter.Reset()
 	l, err := io.Copy(&f.bufWriter, f.flateReader)
 	if err != nil && err != io.ErrUnexpectedEOF {
 		return nil, 0, fmt.Errorf("frame deflate error: %w", err)
