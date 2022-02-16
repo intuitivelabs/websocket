@@ -226,6 +226,9 @@ func TestDecoderUncompressed(t *testing.T) {
 		} else if offs != plainPktCnt {
 			t.Fatalf("decode error %s", err)
 		}
+		if _, err := message.Decode(plainPkt[0:plainPktCnt], plainPktCnt, true); err != ErrDataMoreBytes {
+			t.Fatalf("decode error %s", err)
+		}
 	})
 	t.Run("plain w/ out of bounds offs", func(t *testing.T) {
 		defer func() {
@@ -234,7 +237,7 @@ func TestDecoderUncompressed(t *testing.T) {
 			}
 		}()
 		message.Reset()
-		if _, err := message.Decode(plainPkt[0:314], 1024, true); err != ErrBUG {
+		if _, err := message.Decode(plainPkt[0:plainPktCnt], 1024, true); err != ErrBUG {
 			t.Fatalf("broken offset not tested %s", err)
 		}
 	})

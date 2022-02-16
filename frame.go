@@ -194,7 +194,7 @@ func (f Frame) PayloadData(b []byte) []byte {
 
 func (f *Frame) Decode(b []byte, offset int, mask bool) (int, error) {
 	var err error
-	if offset >= len(b) {
+	if offset > len(b) {
 		return offset, ErrBUG
 	}
 	currentBuf := b[offset:]
