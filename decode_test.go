@@ -229,15 +229,13 @@ func TestDecoderUncompressed(t *testing.T) {
 	})
 	t.Run("plain w/ out of bounds offs", func(t *testing.T) {
 		defer func() {
-			if reason := recover(); reason == nil {
-				t.Fatalf("no panic!")
+			if reason := recover(); reason != nil {
+				t.Fatalf("runtime panic %v!", reason)
 			}
 		}()
 		message.Reset()
-		if offs, err := message.Decode(plainPkt[0:314], 1024, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
-		} else if offs != plainPktCnt {
-			t.Fatalf("decode error %s", err)
+		if _, err := message.Decode(plainPkt[0:314], 1024, true); err != ErrBUG {
+			t.Fatalf("broken offset not tested %s", err)
 		}
 	})
 	t.Run("masked full", func(t *testing.T) {

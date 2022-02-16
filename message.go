@@ -39,6 +39,7 @@ var (
 	ErrNotDecoded         = errors.New("frame (fragment) is not decoded")
 	ErrDeflateBufTooSmall = errors.New("deflate buffer is too small")
 	ErrCritical           = errors.New("critical error")
+	ErrBUG                = errors.New("BUG")
 )
 
 // A websockets message can be sent using a number of frames (by fragmenting it)
