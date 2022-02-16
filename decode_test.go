@@ -203,6 +203,38 @@ func TestDecoderUncompressed(t *testing.T) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes), string(pd[0:length]))
 		}
 	})
+	t.Run("plain partial frame", func(t *testing.T) {
+		frame := Frame{}
+		offs, err := frame.Decode(plainPkt[0:3], 0, true)
+		if err != ErrHdrMoreBytes {
+			t.Fatalf("decode error: %s", err)
+		} else if offs != 0 {
+			t.Fatalf("decode error: %s", err)
+		}
+		if offs, err = frame.Decode(plainPkt[0:4], offs, true); err != ErrDataMoreBytes {
+			t.Fatalf("decode error %s", err)
+		}
+		if offs, err = frame.Decode(plainPkt[0:100], offs, true); err != ErrDataMoreBytes {
+			t.Fatalf("decode error %s", err)
+		}
+		brokenOffs, err := frame.Decode(plainPkt[0:100], 10, true)
+		if err != ErrWrongOffset {
+			t.Fatalf("decode error: %s, broken offset: %d", err, brokenOffs)
+		}
+		brokenOffs, err = frame.Decode(plainPkt[0:100], 1000, true)
+		if err != ErrBUG {
+			t.Fatalf("decode error: %s, broken offset: %d", err, brokenOffs)
+		}
+		if offs, err = frame.Decode(plainPkt[0:314], offs, true); err != ErrMsgOk {
+			t.Fatalf("decode error %s", err)
+		} else if offs != plainPktCnt {
+			t.Fatalf("decode error %s", err)
+		}
+		frame.Reset()
+		if _, err := frame.Decode(plainPkt[0:plainPktCnt], plainPktCnt, true); err != ErrHdrMoreBytes {
+			t.Fatalf("decode error %s", err)
+		}
+	})
 	t.Run("plain partial", func(t *testing.T) {
 		message.Reset()
 		offs, err := message.Decode(plainPkt[0:3], 0, true)
@@ -226,7 +258,7 @@ func TestDecoderUncompressed(t *testing.T) {
 		} else if offs != plainPktCnt {
 			t.Fatalf("decode error %s", err)
 		}
-		if _, err := message.Decode(plainPkt[0:plainPktCnt], plainPktCnt, true); err != ErrDataMoreBytes {
+		if _, err := message.Decode(plainPkt[0:plainPktCnt], plainPktCnt, true); err != ErrHdrMoreBytes {
 			t.Fatalf("decode error %s", err)
 		}
 	})
