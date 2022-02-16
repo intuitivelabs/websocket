@@ -20,7 +20,7 @@ func readPkt(dirName, fileName string, b []byte) (int, error) {
 func TestDecoderUncompressed(t *testing.T) {
 	// set-up if needed
 	var plainPkt, maskedPkt [2048]byte
-	message := NewMessage(64535, 10)
+	message := NewMessage(64535, 10, false)
 	dirName := "test_files"
 	fileName := "404"
 	plainPktCnt, readErr := readPkt(dirName, fileName, plainPkt[:])
@@ -205,22 +205,36 @@ func TestDecoderUncompressed(t *testing.T) {
 	})
 	t.Run("plain partial", func(t *testing.T) {
 		message.Reset()
-		if offs, err := message.Decode(plainPkt[0:3], 0, true); err != ErrHdrMoreBytes {
+		offs, err := message.Decode(plainPkt[0:3], 0, true)
+		if err != ErrHdrMoreBytes {
 			t.Fatalf("decode error: %s", err)
 		} else if offs != 0 {
 			t.Fatalf("decode error: %s", err)
 		}
-		if offs, err := message.Decode(plainPkt[0:4], 0, true); err != ErrDataMoreBytes {
+		if offs, err = message.Decode(plainPkt[0:4], offs, true); err != ErrDataMoreBytes {
 			t.Fatalf("decode error %s", err)
 		} else if offs != 0 {
 			t.Fatalf("decode error %s", err)
 		}
-		if offs, err := message.Decode(plainPkt[0:100], 0, true); err != ErrDataMoreBytes {
+		if offs, err = message.Decode(plainPkt[0:100], offs, true); err != ErrDataMoreBytes {
 			t.Fatalf("decode error %s", err)
 		} else if offs != 0 {
 			t.Fatalf("decode error %s", err)
 		}
-		if offs, err := message.Decode(plainPkt[0:314], 0, true); err != ErrMsgOk {
+		if offs, err = message.Decode(plainPkt[0:314], offs, true); err != ErrMsgOk {
+			t.Fatalf("decode error %s", err)
+		} else if offs != plainPktCnt {
+			t.Fatalf("decode error %s", err)
+		}
+	})
+	t.Run("plain w/ out of bounds offs", func(t *testing.T) {
+		defer func() {
+			if reason := recover(); reason == nil {
+				t.Fatalf("no panic!")
+			}
+		}()
+		message.Reset()
+		if offs, err := message.Decode(plainPkt[0:314], 1024, true); err != ErrMsgOk {
 			t.Fatalf("decode error %s", err)
 		} else if offs != plainPktCnt {
 			t.Fatalf("decode error %s", err)
@@ -316,7 +330,7 @@ func TestDecoderUncompressed(t *testing.T) {
 }
 
 func TestDecoderCompressed(t *testing.T) {
-	message := NewMessage(64535, 10)
+	message := NewMessage(64535, 10, false)
 	// https://www.rfc-editor.org/rfc/rfc7692.html#section-7.2.3 Examples
 	// https://www.rfc-editor.org/rfc/rfc7692.html#section-7.2.3.1
 	t.Run("rfc7692 one deflate block", func(t *testing.T) {
@@ -565,7 +579,7 @@ func TestDecoderCompressed(t *testing.T) {
 
 func BenchmarkDeflate(b *testing.B) {
 	b.Run("compressed", func(b *testing.B) {
-		message := NewMessage(64535, 10)
+		message := NewMessage(64535, 10, false)
 		compressedPkt := []byte{
 			0xc1, 0x7e, 0x00, 0xd3, 0x2c, 0x8d, 0x4f, 0x6b,
 			0x02, 0x31, 0x10, 0xc5, 0xbf, 0xca, 0x90, 0x93,
