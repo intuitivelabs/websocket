@@ -3,7 +3,6 @@ package websocket
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"testing"
 )
@@ -41,13 +40,13 @@ func TestDecoderUncompressed(t *testing.T) {
 		}
 		message.Reset()
 		if offs, err := message.Decode(plainPkt[:], 0, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != int(message.Len()) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := message.PayloadData(dst[:], plainPkt[:]); err != nil {
-			t.Fatalf("message processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], plainPkt[:]); err != ErrMsgOk {
+			t.Fatalf("message processing error: %s", err.Error())
 		} else if !bytes.Equal(pd[0:length], pktBytes) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes), string(pd[0:length]))
 		}
@@ -61,13 +60,13 @@ func TestDecoderUncompressed(t *testing.T) {
 		}
 		message.Reset()
 		if offs, err := message.Decode(maskedPkt[:], 0, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != int(message.Len()) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := message.PayloadData(dst[:], maskedPkt[:]); err != nil {
-			t.Fatalf("message processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], maskedPkt[:]); err != ErrMsgOk {
+			t.Fatalf("message processing error: %s", err.Error())
 		} else if !bytes.Equal(pd[0:length], pktBytes) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes), string(pd[0:length]))
 		}
@@ -85,25 +84,25 @@ func TestDecoderUncompressed(t *testing.T) {
 		// read first fragment
 		offs, err := message.Decode(plainPkt[:5], 0, true)
 		if err == ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != int(message.Len()) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := message.PayloadData(dst[:], plainPkt[:]); err != nil {
-			t.Fatalf("message processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], plainPkt[:]); err != ErrMsgOk {
+			t.Fatalf("message processing error: %s", err.Error())
 		} else if !bytes.Equal(pd[0:length], pktBytes[0:3]) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes[0:3]), string(pd[0:length]))
 		}
 
 		// read last fragment
 		if offs, err = message.Decode(plainPkt[:], offs, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != len(plainPkt) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
-		if pd, length, err := message.PayloadData(dst[:], plainPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
-			t.Fatalf("message processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], plainPkt[:]); err != ErrMsgOk {
+			t.Fatalf("message processing error: %s", err.Error())
 		} else if !bytes.Equal(pd[0:length], pktBytes) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes), string(pd[0:length]))
 		}
@@ -122,7 +121,7 @@ func TestDecoderUncompressed(t *testing.T) {
 		// read first fragment
 		offs, err := message.Decode(plainPkt[:5], 0, true)
 		if err == ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != int(message.Len()) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		} else if message.LastFrame != 1 {
@@ -135,7 +134,7 @@ func TestDecoderUncompressed(t *testing.T) {
 		}
 		// read last fragment
 		if offs, err = message.Decode(plainPkt[:], offs, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != len(plainPkt) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		} else if message.LastFrame != 2 {
@@ -192,13 +191,13 @@ func TestDecoderUncompressed(t *testing.T) {
 		}
 		message.Reset()
 		if offs, err := message.Decode(plainPkt[:], 0, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != int(message.Len()) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := message.PayloadData(dst[:], plainPkt[:]); err != nil {
-			t.Fatalf("message processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], plainPkt[:]); err != ErrMsgOk {
+			t.Fatalf("message processing error: %s", err.Error())
 		} else if !bytes.Equal(pd[0:length], pktBytes) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes), string(pd[0:length]))
 		}
@@ -207,59 +206,59 @@ func TestDecoderUncompressed(t *testing.T) {
 		frame := Frame{}
 		offs, err := frame.Decode(plainPkt[0:3], 0, true)
 		if err != ErrHdrMoreBytes {
-			t.Fatalf("decode error: %s", err)
+			t.Fatalf("decode error: %s", err.Error())
 		} else if offs != 0 {
-			t.Fatalf("decode error: %s", err)
+			t.Fatalf("decode error: %s", err.Error())
 		}
 		if offs, err = frame.Decode(plainPkt[0:4], offs, true); err != ErrDataMoreBytes {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		}
 		if offs, err = frame.Decode(plainPkt[0:100], offs, true); err != ErrDataMoreBytes {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		}
 		brokenOffs, err := frame.Decode(plainPkt[0:100], 10, true)
 		if err != ErrWrongOffset {
-			t.Fatalf("decode error: %s, broken offset: %d", err, brokenOffs)
+			t.Fatalf("decode error: %s, broken offset: %d", err.Error(), brokenOffs)
 		}
 		brokenOffs, err = frame.Decode(plainPkt[0:100], 1000, true)
 		if err != ErrBUG {
-			t.Fatalf("decode error: %s, broken offset: %d", err, brokenOffs)
+			t.Fatalf("decode error: %s, broken offset: %d", err.Error(), brokenOffs)
 		}
 		if offs, err = frame.Decode(plainPkt[0:314], offs, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != plainPktCnt {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		}
 		frame.Reset()
 		if _, err := frame.Decode(plainPkt[0:plainPktCnt], plainPktCnt, true); err != ErrHdrMoreBytes {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		}
 	})
 	t.Run("plain partial", func(t *testing.T) {
 		message.Reset()
 		offs, err := message.Decode(plainPkt[0:3], 0, true)
 		if err != ErrHdrMoreBytes {
-			t.Fatalf("decode error: %s", err)
+			t.Fatalf("decode error: %s", err.Error())
 		} else if offs != 0 {
-			t.Fatalf("decode error: %s", err)
+			t.Fatalf("decode error: %s", err.Error())
 		}
 		if offs, err = message.Decode(plainPkt[0:4], offs, true); err != ErrDataMoreBytes {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != 0 {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		}
 		if offs, err = message.Decode(plainPkt[0:100], offs, true); err != ErrDataMoreBytes {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != 0 {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		}
 		if offs, err = message.Decode(plainPkt[0:314], offs, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != plainPktCnt {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		}
 		if _, err := message.Decode(plainPkt[0:plainPktCnt], plainPktCnt, true); err != ErrHdrMoreBytes {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		}
 	})
 	t.Run("plain w/ out of bounds offs", func(t *testing.T) {
@@ -270,7 +269,7 @@ func TestDecoderUncompressed(t *testing.T) {
 		}()
 		message.Reset()
 		if _, err := message.Decode(plainPkt[0:plainPktCnt], 1024, true); err != ErrBUG {
-			t.Fatalf("broken offset not tested %s", err)
+			t.Fatalf("broken offset not tested %s", err.Error())
 		}
 	})
 	t.Run("masked full", func(t *testing.T) {
@@ -349,13 +348,13 @@ func TestDecoderUncompressed(t *testing.T) {
 		}
 		message.Reset()
 		if offs, err := message.Decode(maskedPkt[:], 0, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != maskedPktCnt {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := message.PayloadData(dst[:], maskedPkt[:]); err != nil {
-			t.Fatalf("message processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], maskedPkt[:]); err != ErrMsgOk {
+			t.Fatalf("message processing error: %s", err.Error())
 		} else if !bytes.Equal(pd[0:length], pktBytes) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(pktBytes), string(pd[0:length]))
 		}
@@ -378,13 +377,13 @@ func TestDecoderCompressed(t *testing.T) {
 
 		message.Reset()
 		if offs, err := message.Decode(compressedPkt[:], 0, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != len(compressedPkt) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
-			t.Fatalf("message processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != ErrMsgOk {
+			t.Fatalf("message processing error: %s", err.Error())
 		} else if !bytes.Equal(pd[0:length], plainPkt) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkt), string(pd[0:length]))
 		}
@@ -403,13 +402,13 @@ func TestDecoderCompressed(t *testing.T) {
 
 		message.Reset()
 		if offs, err := message.Decode(compressedPkt[:], 0, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != len(compressedPkt) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
-			t.Fatalf("message processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != ErrMsgOk {
+			t.Fatalf("message processing error: %s", err.Error())
 		} else if !bytes.Equal(pd[0:length], plainPkt) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkt), string(pd[0:length]))
 		}
@@ -427,13 +426,13 @@ func TestDecoderCompressed(t *testing.T) {
 
 		message.Reset()
 		if offs, err := message.Decode(compressedPkt[:], 0, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != len(compressedPkt) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
-			t.Fatalf("message processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != ErrMsgOk {
+			t.Fatalf("message processing error: %s", err.Error())
 		} else if !bytes.Equal(pd[0:length], plainPkt) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkt), string(pd[0:length]))
 		}
@@ -450,13 +449,13 @@ func TestDecoderCompressed(t *testing.T) {
 
 		message.Reset()
 		if offs, err := message.Decode(compressedPkt[:], 0, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != len(compressedPkt) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
-			t.Fatalf("message processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != ErrMsgOk {
+			t.Fatalf("message processing error: %s", err.Error())
 		} else if !bytes.Equal(pd[0:length], plainPkt) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkt), string(pd[0:length]))
 		}
@@ -474,13 +473,13 @@ func TestDecoderCompressed(t *testing.T) {
 
 		message.Reset()
 		if offs, err := message.Decode(compressedPkt[:], 0, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != len(compressedPkt) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
-			t.Fatalf("message processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != ErrMsgOk {
+			t.Fatalf("message processing error: %s", err.Error())
 		} else if !bytes.Equal(pd[0:length], plainPkt) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkt), string(pd[0:length]))
 		}
@@ -511,24 +510,24 @@ func TestDecoderCompressed(t *testing.T) {
 
 		message.Reset()
 		if offs, err := message.Decode(compressedPkts[0][:], 0, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != len(compressedPkts[0]) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := message.PayloadData(dst[:], compressedPkts[0][:]); err != nil && err != io.ErrUnexpectedEOF {
-			t.Fatalf("message processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], compressedPkts[0][:]); err != ErrMsgOk {
+			t.Fatalf("message processing error: %s", err.Error())
 		} else if !bytes.Equal(pd[0:length], plainPkts[0]) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkts[0]), string(pd[0:length]))
 		}
 		message.Reset()
 		if offs, err := message.Decode(compressedPkts[1][:], 0, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != len(compressedPkts[1]) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
-		if pd, length, err := message.PayloadData(dst[:], compressedPkts[1][:]); err != nil && err != io.ErrUnexpectedEOF {
-			t.Fatalf("message processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], compressedPkts[1][:]); err != ErrMsgOk {
+			t.Fatalf("message processing error: %s", err.Error())
 		} else if !bytes.Equal(pd[0:length], plainPkts[1]) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkts[1]), string(pd[0:length]))
 		}
@@ -604,13 +603,13 @@ func TestDecoderCompressed(t *testing.T) {
 
 		message.Reset()
 		if offs, err := message.Decode(compressedPkt[:], 0, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != len(compressedPkt) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
-			t.Fatalf("message processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != ErrMsgOk {
+			t.Fatalf("message processing error: %s", err.Error())
 		} else if !bytes.Equal(pd[0:length], plainPkt) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkt), string(pd[0:length]))
 		}
@@ -633,25 +632,25 @@ func TestDecoderCompressed(t *testing.T) {
 		// read first fragment
 		offs, err := message.Decode(compressedPkt[:13], 0, true)
 		if err == ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != int(message.Len()) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
 		var dst [2048]byte
-		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
-			t.Fatalf("message processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != ErrMsgOk {
+			t.Fatalf("message processing error: %s", err.Error())
 		} else if !bytes.Equal(pd[0:length], plainPkt) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkt), string(pd[0:length]))
 		}
 
 		// read last fragment
 		if offs, err = message.Decode(compressedPkt[:], offs, true); err != ErrMsgOk {
-			t.Fatalf("decode error %s", err)
+			t.Fatalf("decode error %s", err.Error())
 		} else if offs != len(compressedPkt) {
 			t.Fatalf("expected offs: %d, got offs: %d", int(message.Len()), offs)
 		}
-		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
-			t.Fatalf("message processing error: %s", err)
+		if pd, length, err := message.PayloadData(dst[:], compressedPkt[:]); err != ErrMsgOk {
+			t.Fatalf("message processing error: %s", err.Error())
 		} else if !bytes.Equal(pd[0:length], plainPkt) {
 			t.Fatalf("content mismatch, expected:\n%v\ngot:\n%v", string(plainPkt), string(pd[0:length]))
 		}
@@ -693,13 +692,13 @@ func BenchmarkDeflate(b *testing.B) {
 
 		message.Reset()
 		if _, err := message.Decode(compressedPkt[:], 0, true); err != ErrMsgOk {
-			b.Fatalf("decode error %s", err)
+			b.Fatalf("decode error %s", err.Error())
 		}
 		var dst [2048]byte
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			if _, _, err := message.PayloadData(dst[:], compressedPkt[:]); err != nil && err != io.ErrUnexpectedEOF {
-				b.Fatalf("message processing error: %s", err)
+			if _, _, err := message.PayloadData(dst[:], compressedPkt[:]); err != ErrMsgOk {
+				b.Fatalf("message processing error: %s", err.Error())
 			}
 		}
 	})

@@ -3,8 +3,6 @@ package websocket
 import (
 	"bytes"
 	"compress/flate"
-	"errors"
-	"fmt"
 	"io"
 )
 
@@ -27,15 +25,6 @@ import (
 // deflate empty block
 var (
 	deflateNonCompressedEmptyBlock = []byte{0x00, 0x00, 0xFF, 0xFF}
-)
-
-// errors
-var (
-	ErrFragBufTooSmall    = errors.New("defragmentation buffer is too small")
-	ErrFragCopy           = errors.New("fragment copy failure")
-	ErrNotDecoded         = errors.New("frame (fragment) is not decoded")
-	ErrDeflateBufTooSmall = errors.New("deflate buffer is too small")
-	ErrCritical           = errors.New("critical error")
 )
 
 // A websockets message can be sent using a number of frames (by fragmenting it)
@@ -151,12 +140,12 @@ func (f *Message) DropFragment() {
 //      }
 //	}
 //
-// In case of success it returns the offset where the new fragment should start and the error "ErrMsgOk"
+// In case of success it returns the offset where the new fragment should start and the ErrorWs "ErrMsgOk"
 // In case of failure it returns the value of the input parameter "offset" and either of the errors:
 // "ErrHdrMoreBytes", "ErrDataMoreBytes" meaning that more data is needed for decoding the frame
-func (f *Message) Decode(b []byte, offset int, mask bool) (int, error) {
+func (f *Message) Decode(b []byte, offset int, mask bool) (int, ErrorWs) {
 	var (
-		err error
+		err ErrorWs
 	)
 	for {
 		fragment := f.NextFragment()
@@ -169,7 +158,7 @@ func (f *Message) Decode(b []byte, offset int, mask bool) (int, error) {
 			f.DropFragment()
 			continue
 		}
-		if err == nil || err == ErrMsgOk {
+		if err == ErrMsgOk {
 			if fragment.Last() {
 				// it is either a stand-alone frame or it is the last fragment of the frame
 				f.CompleteF = true
@@ -198,16 +187,16 @@ func (f Message) FragmentCount() int {
 
 // Defragment unmasks fragments which were decoded from the "src" buffer and copies their payload
 // data into "dst" memory buffer. If there is only one fragment, no copy is performed.
-// It returns the buffer containing the unmasked payload data, its length and error if the operation
+// It returns the buffer containing the unmasked payload data, its length and ErrorWs if the operation
 // could not be performed correctly.
-func (f *Message) Defragment(dst, src []byte) ([]byte, int, error) {
+func (f *Message) Defragment(dst, src []byte) ([]byte, int, ErrorWs) {
 	if !f.Decoded() {
 		return nil, 0, ErrNotDecoded
 	}
 	f.Mask(src)
 	if len(f.Frames) == 1 {
 		// only one fragment
-		return f.Frames[0].PayloadDataPf.Get(src), int(f.Frames[0].PayloadDataPf.Len), nil
+		return f.Frames[0].PayloadDataPf.Get(src), int(f.Frames[0].PayloadDataPf.Len), ErrMsgOk
 	}
 	if int(f.PayloadLen()) > len(dst) {
 		return nil, 0, ErrFragBufTooSmall
@@ -221,19 +210,19 @@ func (f *Message) Defragment(dst, src []byte) ([]byte, int, error) {
 		}
 		offset += n
 	}
-	return dst, offset, nil
+	return dst, offset, ErrMsgOk
 }
 
 // PayloadDataRaw returns the raw frame payload data without applying any Per-Message Extensions algorithm (i.e. PCME).
-func (f *Message) PayloadDataRaw(dst, src []byte) ([]byte, int, error) {
+func (f *Message) PayloadDataRaw(dst, src []byte) ([]byte, int, ErrorWs) {
 	return f.Defragment(dst, src)
 }
 
 // PayloadData returns the raw frame payload data after applying Per-Message Compression Extension.
-func (f *Message) PayloadData(dst, src []byte) ([]byte, int, error) {
+func (f *Message) PayloadData(dst, src []byte) ([]byte, int, ErrorWs) {
 	if f.Compressed() {
-		var err error
-		if _, f.payloadBufLen, err = f.Defragment(f.payloadBuf, src); err != nil {
+		var err ErrorWs
+		if _, f.payloadBufLen, err = f.Defragment(f.payloadBuf, src); err != ErrMsgOk {
 			return nil, 0, err
 		}
 		return f.Deflate()
@@ -275,7 +264,8 @@ func (f *Message) PayloadData(dst, src []byte) ([]byte, int, error) {
 
 */
 // Deflate decompresses the frame using PCME
-func (f *Message) Deflate() ([]byte, int, error) {
+func (f *Message) Deflate() ([]byte, int, ErrorWs) {
+	var errWs ErrorWs
 	if len(f.payloadBuf[f.payloadBufLen:]) < len(deflateNonCompressedEmptyBlock) {
 		return nil, 0, ErrDeflateBufTooSmall
 	}
@@ -288,8 +278,11 @@ func (f *Message) Deflate() ([]byte, int, error) {
 		f.bufWriter.Reset()
 	}
 	l, err := io.Copy(&f.bufWriter, f.flateReader)
-	if err != nil && err != io.ErrUnexpectedEOF {
-		return nil, 0, fmt.Errorf("frame deflate error: %w", err)
+	switch err {
+	case nil, io.ErrUnexpectedEOF:
+		errWs = ErrMsgOk
+	default:
+		return nil, 0, ErrDeflate
 	}
-	return f.bufWriter.Bytes(), int(l), err
+	return f.bufWriter.Bytes(), int(l), errWs
 }

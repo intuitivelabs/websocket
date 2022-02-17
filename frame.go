@@ -1,18 +1,7 @@
 package websocket
 
 import (
-	"errors"
 	"github.com/intuitivelabs/httpsp"
-)
-
-// errors
-var (
-	ErrMsgOk               = errors.New("header OK")
-	ErrHdrMoreBytes        = errors.New("need more bytes for WebSocket frame header")
-	ErrDataMoreBytes       = errors.New("need more bytes for WebSocket frame data")
-	ErrWrongOffset         = errors.New("wrong buffer offset")
-	ErrFrameAlreadyDecoded = errors.New("frame was already decoded")
-	ErrBUG                 = errors.New("BUG")
 )
 
 // Fin, Reserved flags & opcode bitmask
@@ -94,7 +83,7 @@ func (h Header) Len() int {
 	return length
 }
 
-func (h *Header) DecodeWithOffset(b []byte, offset int) error {
+func (h *Header) DecodeWithOffset(b []byte, offset int) ErrorWs {
 	if offset > len(b) {
 		return ErrBUG
 	}
@@ -108,7 +97,7 @@ func (h *Header) DecodeWithOffset(b []byte, offset int) error {
 	return err
 }
 
-func (h *Header) Decode(b []byte) error {
+func (h *Header) Decode(b []byte) ErrorWs {
 	h.DecodedF = false
 	if len(b) < MinFrameLen {
 		return ErrHdrMoreBytes
@@ -218,8 +207,8 @@ func (f Frame) PayloadData(b []byte) []byte {
 	return f.PayloadDataPf.Get(b)
 }
 
-func (f *Frame) Decode(b []byte, offset int, mask bool) (int, error) {
-	var err error
+func (f *Frame) Decode(b []byte, offset int, mask bool) (int, ErrorWs) {
+	var err ErrorWs
 	if f.DecodedF {
 		return offset, ErrFrameAlreadyDecoded
 	}
