@@ -1,3 +1,9 @@
+// Copyright 2022 Intuitive Labs GmbH. All rights reserved.
+//
+// Use of this source code is governed by a source-available license
+// that can be found in the INTUITIVE_LABS-LICENSE.txt file in the root of the source
+// tree.
+
 package websocket
 
 import (
