@@ -41,9 +41,9 @@ var err2ErrorVal = [...]error{
 
 // ErrorConv converts the ErrorHdr value to error.
 // It uses "boxed" values to prevent runtime allocations.
-func (e ErrorWs) Error() error {
+func (e ErrorWs) Error() string {
 	if 0 <= int(e) && int(e) < len(err2ErrorVal) {
-		return err2ErrorVal[e]
+		return err2ErrorVal[e].Error()
 	}
 	return ErrConvBUG.Error()
 }
